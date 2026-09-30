@@ -1,0 +1,185 @@
+/* After the Uiverse logo card by Smit-Prajapati: same beats (border rotates in, logo widens with a
+   caret and a light trail, text tracks in), autoplayed and recoloured: forest ground, lime ink. */
+.splash {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  background: rgb(var(--forest));
+  color: rgb(var(--lime));
+  transition: opacity 450ms ease, transform 450ms ease;
+}
+.splash--out {
+  opacity: 0;
+  transform: scale(1.02);
+  pointer-events: none;
+}
+
+.splash-border {
+  position: absolute;
+  inset: 0;
+  border: 2px solid rgb(var(--lime) / 0.55);
+  border-radius: 28px;
+  opacity: 0;
+  transform: rotate(6deg);
+  animation: splash-border 800ms cubic-bezier(0.2, 0.7, 0.2, 1) 150ms forwards;
+}
+@keyframes splash-border {
+  to {
+    inset: 24px;
+    opacity: 1;
+    transform: rotate(0);
+  }
+}
+
+.splash-content {
+  display: grid;
+  justify-items: center;
+  gap: 18px;
+}
+
+.splash-logo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.splash-mark {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgb(var(--lime));
+  transform: scale(0);
+  animation: splash-pop 450ms cubic-bezier(0.3, 1.4, 0.5, 1) forwards;
+}
+.splash-mark svg {
+  width: 28px;
+  height: 28px;
+  fill: rgb(var(--forest));
+}
+@keyframes splash-pop {
+  to {
+    transform: scale(1);
+  }
+}
+
+/* the wordmark widens out of the mark, with a caret on its leading edge and a light sweep */
+.splash-word {
+  position: relative;
+  display: inline-block;
+  max-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-family: Gloock, serif;
+  font-size: clamp(34px, 7vw, 52px);
+  line-height: 1.15;
+  border-right: 2px solid transparent;
+  animation: splash-widen 1000ms cubic-bezier(0.65, 0, 0.35, 1) 350ms forwards,
+    splash-caret 1000ms ease-in-out 350ms;
+}
+@keyframes splash-widen {
+  to {
+    max-width: 360px;
+  }
+}
+@keyframes splash-caret {
+  0%, 100% { border-right-color: transparent; }
+  10%, 80% { border-right-color: rgb(var(--lime)); }
+}
+.splash-trail {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  animation: splash-trail 1000ms ease-in-out 350ms;
+}
+@keyframes splash-trail {
+  0% { background: linear-gradient(90deg, rgb(var(--lime) / 0) 90%, rgb(var(--lime) / 0.9) 100%); opacity: 0; }
+  30%, 70% { background: linear-gradient(90deg, rgb(var(--lime) / 0) 70%, rgb(var(--lime) / 0.9) 100%); opacity: 1; }
+  95% { background: linear-gradient(90deg, rgb(var(--lime) / 0) 90%, rgb(var(--lime) / 0.9) 100%); opacity: 0; }
+}
+
+/* the signature: a range band opens out from its median */
+.splash-band {
+  position: relative;
+  width: 180px;
+  height: 14px;
+}
+.splash-band-track {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 999px;
+  background: rgb(var(--lime));
+  transform: translateY(-50%) scaleX(0);
+  animation: splash-open 600ms cubic-bezier(0.2, 0.7, 0.2, 1) 1000ms forwards;
+}
+.splash-band-dot {
+  position: absolute;
+  top: 50%;
+  left: 44%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: rgb(var(--lime));
+  box-shadow: 0 0 0 3px rgb(var(--forest));
+  transform: translate(-50%, -50%) scale(0);
+  animation: splash-dot 350ms cubic-bezier(0.3, 1.4, 0.5, 1) 1100ms forwards;
+}
+@keyframes splash-open {
+  to { transform: translateY(-50%) scaleX(1); }
+}
+@keyframes splash-dot {
+  to { transform: translate(-50%, -50%) scale(1); }
+}
+
+.splash-tagline {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.9em;
+  padding-left: 0.9em; /* keep tracked text optically centred */
+  opacity: 0;
+  animation: splash-track 700ms ease-out 1000ms forwards;
+}
+@keyframes splash-track {
+  to {
+    letter-spacing: 0.32em;
+    padding-left: 0.32em;
+    opacity: 0.85;
+  }
+}
+
+/* sits in a gap cut from the bottom edge of the border, as in the original card */
+.splash-bottom {
+  position: absolute;
+  left: 50%;
+  bottom: 17px; /* centred on the border line (24px inset) */
+  transform: translateX(-50%);
+  padding: 0 12px;
+  background: rgb(var(--forest));
+  font-size: 11px;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  opacity: 0;
+  animation: splash-bottom 600ms ease-out 700ms forwards;
+}
+@keyframes splash-bottom {
+  to {
+    opacity: 0.8;
+    letter-spacing: 0.18em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .splash *,
+  .splash {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    transition: none !important;
+  }
+}

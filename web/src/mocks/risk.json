@@ -1,0 +1,14 @@
+[
+  { "deal_id": "D-087", "name": "Acme", "value": 500000, "p_win": 0.38, "p_win_low": 0.26, "p_win_high": 0.51, "expected_damage": 310000, "reasons": ["3rd date push", "silent 42 days"], "rep": "Raj Sharma", "segment": "Enterprise" },
+  { "deal_id": "D-201", "name": "Wonka Industries", "value": 420000, "p_win": 0.52, "p_win_low": 0.41, "p_win_high": 0.63, "expected_damage": 201600, "reasons": ["stuck in demo 61 days"], "rep": "Meera Iyer", "segment": "Enterprise" },
+  { "deal_id": "D-120", "name": "Pied Piper", "value": 260000, "p_win": 0.35, "p_win_low": 0.22, "p_win_high": 0.48, "expected_damage": 169000, "reasons": ["optimistic rep", "2nd date push"], "rep": "Raj Sharma", "segment": "Mid-Market" },
+  { "deal_id": "D-142", "name": "Hooli", "value": 210000, "p_win": 0.29, "p_win_low": 0.18, "p_win_high": 0.41, "expected_damage": 149100, "reasons": ["silent 24 days"], "rep": "Arjun Rao", "segment": "Mid-Market" },
+  { "deal_id": "D-311", "name": "Initech", "value": 200000, "p_win": 0.46, "p_win_low": 0.33, "p_win_high": 0.6, "expected_damage": 108000, "reasons": ["new this week", "large for SMB"], "rep": "Priya Nair", "segment": "SMB" },
+  { "deal_id": "D-133", "name": "Cyberdyne", "value": 180000, "p_win": 0.44, "p_win_low": 0.32, "p_win_high": 0.56, "expected_damage": 100800, "reasons": ["optimistic rep"], "rep": "Raj Sharma", "segment": "Mid-Market" },
+  { "deal_id": "D-171", "name": "Tyrell", "value": 140000, "p_win": 0.31, "p_win_low": 0.19, "p_win_high": 0.44, "expected_damage": 96600, "reasons": ["silent 28 days", "stuck in proposal 40 days"], "rep": "Kabir Das", "segment": "Enterprise" },
+  { "deal_id": "D-156", "name": "Soylent", "value": 120000, "p_win": 0.33, "p_win_low": 0.21, "p_win_high": 0.46, "expected_damage": 80400, "reasons": ["silent 21 days"], "rep": "Arjun Rao", "segment": "SMB" },
+  { "deal_id": "D-165", "name": "Massive Dynamic", "value": 150000, "p_win": 0.58, "p_win_low": 0.47, "p_win_high": 0.69, "expected_damage": 63000, "reasons": ["optimistic rep"], "rep": "Raj Sharma", "segment": "Enterprise" },
+  { "deal_id": "D-190", "name": "Vandelay", "value": 90000, "p_win": 0.36, "p_win_low": 0.24, "p_win_high": 0.49, "expected_damage": 57600, "reasons": ["silent 22 days"], "rep": "Kabir Das", "segment": "SMB" },
+  { "deal_id": "D-212", "name": "Stark Supply", "value": 300000, "p_win": 0.84, "p_win_low": 0.76, "p_win_high": 0.9, "expected_damage": 48000, "reasons": ["late stage", "active this week"], "rep": "Priya Nair", "segment": "Enterprise" },
+  { "deal_id": "D-224", "name": "Oscorp", "value": 75000, "p_win": 0.61, "p_win_low": 0.49, "p_win_high": 0.72, "expected_damage": 29250, "reasons": ["1st date push"], "rep": "Meera Iyer", "segment": "SMB" }
+]

@@ -1,0 +1,16 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# dependencies and builds
+node_modules/
+dist/
+engine/.venv/
+__pycache__/
+*.pyc
+
+# local tools and OS
+.claude/
+.kilo/
+.DS_Store

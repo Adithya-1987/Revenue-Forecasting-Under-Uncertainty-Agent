@@ -1,0 +1,20 @@
+{
+  "run_id": "run-2026-09-28",
+  "prev_run_id": "run-2026-09-21",
+  "horizon": 30,
+  "prev_total": 2400000,
+  "curr_total": 1920000,
+  "causes": [
+    { "cause_type": "closed_lost", "deal_id": "D-104", "deal_name": "Globex", "amount": -120000, "description": "Marked closed lost" },
+    { "cause_type": "new_deal", "deal_id": "D-311", "deal_name": "Initech", "amount": 105000, "description": "New deal entered at proposal stage" },
+    { "cause_type": "close_date", "deal_id": "D-087", "deal_name": "Acme", "amount": -310000, "description": "Close date moved 28 Sep to 15 Nov, now outside 30 days" },
+    { "cause_type": "decay", "deal_id": "D-142", "deal_name": "Hooli", "amount": -36500, "description": "No activity for 24 days" },
+    { "cause_type": "decay", "deal_id": "D-156", "deal_name": "Soylent", "amount": -25000, "description": "No activity for 21 days" },
+    { "cause_type": "decay", "deal_id": "D-171", "deal_name": "Tyrell", "amount": -20000, "description": "No activity for 28 days" },
+    { "cause_type": "decay", "deal_id": "D-190", "deal_name": "Vandelay", "amount": -15000, "description": "No activity for 22 days" },
+    { "cause_type": "calibration", "deal_id": "D-120", "deal_name": "Pied Piper", "amount": -30000, "description": "Raj Sharma's calibration 0.88 to 0.79 after two misses" },
+    { "cause_type": "calibration", "deal_id": "D-133", "deal_name": "Cyberdyne", "amount": -18000, "description": "Raj Sharma's calibration 0.88 to 0.79 after two misses" },
+    { "cause_type": "calibration", "deal_id": "D-165", "deal_name": "Massive Dynamic", "amount": -12000, "description": "Raj Sharma's calibration 0.88 to 0.79 after two misses" }
+  ],
+  "residual": 1500
+}

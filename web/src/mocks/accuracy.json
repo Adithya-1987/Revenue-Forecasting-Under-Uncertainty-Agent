@@ -1,0 +1,28 @@
+{
+  "mape": { "30": 0.11, "60": 0.16, "90": 0.22 },
+  "bias": -0.03,
+  "coverage": 0.83,
+  "baseline_mape": 0.31,
+  "history": [
+    { "run_at": "2025-10", "predicted": 1810000, "actual": 1740000, "p10": 1420000, "p90": 2230000 },
+    { "run_at": "2025-11", "predicted": 1950000, "actual": 2080000, "p10": 1530000, "p90": 2390000 },
+    { "run_at": "2025-12", "predicted": 2200000, "actual": 2610000, "p10": 1760000, "p90": 2560000 },
+    { "run_at": "2026-01", "predicted": 1620000, "actual": 1550000, "p10": 1260000, "p90": 2010000 },
+    { "run_at": "2026-02", "predicted": 1740000, "actual": 1820000, "p10": 1360000, "p90": 2150000 },
+    { "run_at": "2026-03", "predicted": 2310000, "actual": 2170000, "p10": 1850000, "p90": 2780000 },
+    { "run_at": "2026-04", "predicted": 1880000, "actual": 1960000, "p10": 1480000, "p90": 2300000 },
+    { "run_at": "2026-05", "predicted": 2020000, "actual": 1590000, "p10": 1620000, "p90": 2450000 },
+    { "run_at": "2026-06", "predicted": 2150000, "actual": 2230000, "p10": 1710000, "p90": 2600000 },
+    { "run_at": "2026-07", "predicted": 1990000, "actual": 1880000, "p10": 1570000, "p90": 2420000 },
+    { "run_at": "2026-08", "predicted": 2080000, "actual": 2140000, "p10": 1650000, "p90": 2510000 },
+    { "run_at": "2026-09", "predicted": 2240000, "actual": 2090000, "p10": 1780000, "p90": 2700000 }
+  ],
+  "reps": [
+    { "id": "R-1", "name": "Priya Nair", "committed": 3200000, "actual": 3780000, "score": 1.18, "label": "sandbagger" },
+    { "id": "R-2", "name": "Meera Iyer", "committed": 2900000, "actual": 2840000, "score": 0.98, "label": "calibrated" },
+    { "id": "R-3", "name": "Arjun Rao", "committed": 2400000, "actual": 2330000, "score": 0.97, "label": "calibrated" },
+    { "id": "R-4", "name": "Kabir Das", "committed": 2100000, "actual": 1890000, "score": 0.9, "label": "calibrated" },
+    { "id": "R-5", "name": "Sana Khan", "committed": 1800000, "actual": 1570000, "score": 0.87, "label": "optimist" },
+    { "id": "R-6", "name": "Raj Sharma", "committed": 3600000, "actual": 2840000, "score": 0.79, "label": "optimist" }
+  ]
+}

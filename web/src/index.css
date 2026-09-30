@@ -1,0 +1,100 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --lime: 217 247 154; /* #d9f79a */
+  --forest: 30 45 38; /* #1e2d26 */
+  --sage: 98 120 90; /* #62785a */
+  --ink: 22 32 30; /* #16201e */
+  --gain: 63 125 58; /* #3f7d3a */
+  --loss: 181 69 47; /* #b5452f */
+  --target: 192 138 46; /* #c08a2e */ /* target marker only */
+  --hair: 223 229 220; /* #dfe5dc */
+}
+
+body {
+  @apply bg-sage font-sans text-base text-ink antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid rgb(var(--forest));
+  outline-offset: 2px;
+}
+.bg-forest :focus-visible,
+.on-dark :focus-visible {
+  outline-color: rgb(var(--lime));
+}
+
+/* The one orchestrated moment: band slides, then ledger rows write in */
+.band-move {
+  transition: left 600ms cubic-bezier(0.2, 0.7, 0.2, 1), width 600ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.write-in {
+  animation: write-in 260ms ease-out both;
+}
+@keyframes write-in {
+  from { opacity: 0; transform: translateY(4px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .band-move { transition: none; }
+  .write-in { animation: none; }
+}
+
+/* Lifting pill (after Gumroad, via Uiverse): lifts up-left and drops a hard shadow on hover. */
+.btn-lift {
+  --bg: rgb(var(--forest));
+  --fg: #fff;
+  --hover-bg: #fff;
+  --hover-text: rgb(var(--forest));
+  --edge: rgb(var(--forest));
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--fg);
+  cursor: pointer;
+  border: 1px solid var(--edge);
+  border-radius: 24px;
+  padding: 0.8em 2em;
+  background: var(--bg);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  transition: 0.2s;
+}
+.btn-lift--light {
+  --bg: #fff;
+  --fg: rgb(var(--forest));
+  --hover-bg: rgb(var(--forest));
+  --hover-text: #fff;
+}
+.btn-lift:hover:not(:disabled) {
+  color: var(--hover-text);
+  transform: translate(-0.25rem, -0.25rem);
+  background: var(--hover-bg);
+  box-shadow: 0.25rem 0.25rem 5px var(--edge);
+}
+.btn-lift:active:not(:disabled) {
+  transform: translate(0);
+  box-shadow: none;
+}
+.btn-lift:disabled {
+  cursor: progress;
+  opacity: 0.85;
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-lift:hover:not(:disabled) { transform: none; }
+}
+
+::selection {
+  background: rgb(var(--forest));
+  color: rgb(var(--lime));
+}
+/* on dark or sage grounds the light pill hovers to lime so it never vanishes */
+.on-dark .btn-lift--light {
+  --hover-bg: rgb(var(--lime));
+  --hover-text: rgb(var(--forest));
+  --edge: rgb(var(--ink));
+}
