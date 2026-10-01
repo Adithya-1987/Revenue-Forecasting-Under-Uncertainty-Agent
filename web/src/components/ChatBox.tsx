@@ -202,15 +202,15 @@ export function ChatBox({ mode = 'forecast' }: { mode?: Mode }) {
   const live = mic === 'recording' || mic === 'listening'
 
   return (
-    <section aria-label={cfg.title} className="card card-pad">
+    <section id={`agent-${mode}`} data-agent aria-label={cfg.title} className="card card-pad scroll-mt-6 sm:!p-8">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-brand-soft text-brand">
-            <Icon size={17} aria-hidden />
+          <span className="grid size-12 shrink-0 place-items-center rounded-xl bg-brand-soft text-brand">
+            <Icon size={22} aria-hidden />
           </span>
           <div>
-            <h2 className="text-md font-semibold">{cfg.title}</h2>
-            <p className="text-sm text-muted">
+            <h2 className="text-xl font-semibold tracking-tight">{cfg.title}</h2>
+            <p className="mt-0.5 text-base text-muted">
               {cfg.sub}
               {ai?.name && questionsLeft != null ? ` ${questionsLeft} left today.` : ''}
             </p>
@@ -229,14 +229,14 @@ export function ChatBox({ mode = 'forecast' }: { mode?: Mode }) {
       </div>
 
       {messages.length > 0 && (
-        <div ref={list} aria-live="polite" className="mt-4 max-h-[440px] space-y-3 overflow-y-auto overscroll-contain pr-1">
+        <div ref={list} aria-live="polite" className="mt-6 max-h-[560px] space-y-4 overflow-y-auto overscroll-contain pr-1">
           {messages.map((m, i) =>
             m.role === 'user' ? (
-              <p key={i} className="write-in ml-auto w-fit max-w-[80%] rounded-lg bg-surface-2 px-3.5 py-2 text-sm">{m.content}</p>
+              <p key={i} className="write-in ml-auto w-fit max-w-[80%] rounded-xl bg-surface-2 px-4 py-2.5 text-base">{m.content}</p>
             ) : (
               <div
                 key={i}
-                className={`write-in max-w-[88%] rounded-lg px-3.5 py-2.5 text-sm leading-relaxed ${
+                className={`write-in max-w-[88%] rounded-xl px-4 py-3 text-base leading-relaxed ${
                   m.error ? 'bg-loss/10 text-loss' : m.refused ? 'border border-dashed border-line text-muted' : 'border border-line'
                 }`}
               >
@@ -245,7 +245,7 @@ export function ChatBox({ mode = 'forecast' }: { mode?: Mode }) {
                   <button
                     type="button"
                     onClick={() => (speaking === i ? (stopSpeaking(), setSpeaking(null)) : say(m.content, i))}
-                    className="mt-2 inline-flex items-center gap-1 text-xs text-faint hover:text-ink"
+                    className="mt-2 inline-flex items-center gap-1 text-sm text-faint hover:text-ink"
                   >
                     {speaking === i ? <><Square size={12} aria-hidden /> Stop</> : <><Volume2 size={12} aria-hidden /> Listen</>}
                   </button>
@@ -269,21 +269,21 @@ export function ChatBox({ mode = 'forecast' }: { mode?: Mode }) {
       )}
 
       {messages.length === 0 && (
-        <div className="mt-4 flex flex-wrap gap-2" role="list" aria-label="Suggested questions">
+        <div className="mt-6 flex flex-wrap gap-2.5" role="list" aria-label="Suggested questions">
           {cfg.starters.map((s) => (
-            <button key={s} type="button" role="listitem" onClick={() => ask(s)} className="rounded-md border border-line px-2.5 py-1 text-xs text-muted transition-colors hover:border-brand/40 hover:text-brand">
+            <button key={s} type="button" role="listitem" onClick={() => ask(s)} className="rounded-lg border border-line px-3.5 py-2 text-sm text-muted transition-colors hover:border-brand/40 hover:text-brand">
               {s}
             </button>
           ))}
         </div>
       )}
 
-      <p aria-live="polite" className="mt-3 min-h-[1rem] text-xs text-faint">
+      <p aria-live="polite" className="mt-4 min-h-[1.25rem] text-sm text-faint">
         {mic === 'recording' ? 'Recording… press the square to send (stops after 30 seconds).' : mic === 'listening' ? 'Listening…' : mic === 'transcribing' ? 'Turning your question into text…' : voiceNote ?? ''}
       </p>
       <form onSubmit={submit} className="mt-1 flex flex-col gap-2 sm:flex-row">
         <label htmlFor={`q-${mode}`} className="sr-only">Question</label>
-        <input id={`q-${mode}`} value={question} maxLength={500} onChange={(e) => setQuestion(e.target.value)} placeholder={cfg.placeholder} className="field flex-1" />
+        <input id={`q-${mode}`} value={question} maxLength={500} onChange={(e) => setQuestion(e.target.value)} placeholder={cfg.placeholder} className="field !h-14 flex-1 !text-base" />
         {canListen && (
           <button
             type="button"
@@ -291,12 +291,12 @@ export function ChatBox({ mode = 'forecast' }: { mode?: Mode }) {
             disabled={busy || mic === 'transcribing'}
             aria-pressed={live}
             aria-label={mic === 'idle' ? 'Ask by voice' : 'Stop and send'}
-            className={`btn !h-11 !w-11 !px-0 ${live ? 'animate-pulse bg-loss text-white motion-reduce:animate-none' : 'btn-secondary'}`}
+            className={`btn !h-14 !w-14 !px-0 ${live ? 'animate-pulse bg-loss text-white motion-reduce:animate-none' : 'btn-secondary'}`}
           >
             {live ? <Square size={16} aria-hidden /> : <Mic size={18} aria-hidden />}
           </button>
         )}
-        <Button type="submit" busy={busy} icon={Send} className="!h-11" disabled={!question.trim()}>
+        <Button type="submit" busy={busy} icon={Send} size="lg" className="!h-14" disabled={!question.trim()}>
           {busy ? 'Asking' : 'Ask'}
         </Button>
       </form>

@@ -1,0 +1,36 @@
+# Render Blueprint: the Node API, with the Python forecast engine in a venv beside it.
+services:
+  - type: web
+    name: rangefinder-api
+    runtime: node
+    plan: free
+    buildCommand: cd server && npm ci && cd .. && python3 -m venv engine/.venv && engine/.venv/bin/pip install -r engine/requirements.txt
+    startCommand: cd server && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: SUPABASE_DB_URL
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_ANON_KEY
+        sync: false
+      - key: GEMINI_API_KEYS
+        sync: false
+      - key: GEMINI_RPM
+        value: "10"
+      - key: NOVA_API_KEY
+        sync: false
+      - key: NOVA_BASE_URL
+        value: https://www.aczen.in/nova-api/v1
+      - key: NOVA_WORKSPACES
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_VOICE_ID
+        value: JBFqnCBsd6RMkjVDRZzb
+      - key: ELEVENLABS_TTS_MODEL
+        value: eleven_multilingual_v2
+      - key: ELEVENLABS_STT_MODEL
+        value: scribe_v2

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { motion } from 'motion/react'
 import {
+  Bot,
   Activity,
   CheckCircle2,
   ChevronDown,
@@ -241,7 +242,7 @@ function RunToast() {
 
   const show = running || done || !!error
   return (
-    <div aria-live="polite" className="pointer-events-none fixed bottom-6 right-6 z-50 flex justify-end">
+    <div aria-live="polite" className="pointer-events-none fixed bottom-24 right-6 z-50 flex justify-end">
       {show && (
         <div
           key={running ? 'run' : error ? 'err' : 'done'}
@@ -286,6 +287,41 @@ function RunToast() {
  * A frosted frame floating on the warm backdrop: sidebar and content live inside it. From lg up the frame
  * fills the window and the content scrolls inside it; below lg the page scrolls and a drawer holds the nav.
  */
+/** Jump to the page's agent; pages without one open the Dashboard's. */
+function AgentButton() {
+  const { pathname, hash } = useLocation()
+  const navigate = useNavigate()
+  const go = () => {
+    const el = document.querySelector<HTMLElement>('[data-agent]')
+    if (!el) return navigate('/app#agent')
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    setTimeout(() => el.querySelector<HTMLInputElement>('input')?.focus({ preventScroll: true }), 500)
+  }
+  // arriving from another page: wait for the agent to render, then jump
+  useEffect(() => {
+    if (hash !== '#agent') return
+    let tries = 0
+    const t = setInterval(() => {
+      if (document.querySelector('[data-agent]') || ++tries > 40) (clearInterval(t), go(), history.replaceState(null, '', pathname))
+    }, 150)
+    return () => clearInterval(t)
+  }, [hash, pathname]) // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <button
+      type="button"
+      onClick={go}
+      aria-label="Ask the agent"
+      title="Ask the agent"
+      className="group fixed bottom-6 right-6 z-40 grid size-16 place-items-center rounded-full border border-white/50 bg-white/20 p-1.5 shadow-[0_10px_30px_-8px_rgb(var(--brand)/0.6),inset_0_1px_0_rgb(255_255_255/0.5)] backdrop-blur-xl transition-transform duration-200 ease-out hover:scale-105 active:scale-95 dark:border-white/20 dark:bg-white/10"
+    >
+      <span className="grid size-full place-items-center rounded-full bg-gradient-to-br from-[#F6B07E] via-[#E8783A] to-[#B54E16] text-white shadow-inner">
+        <Bot size={26} aria-hidden className="drop-shadow-sm transition-transform duration-200 group-hover:-rotate-6" />
+      </span>
+      <span aria-hidden className="absolute right-0.5 top-0.5 size-3.5 rounded-full border-2 border-white bg-gain dark:border-[#1c1a19]" />
+    </button>
+  )
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false)
   const { pathname } = useLocation()
@@ -353,6 +389,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </div>
       </div>
+      <AgentButton />
       <RunToast />
     </div>
   )
