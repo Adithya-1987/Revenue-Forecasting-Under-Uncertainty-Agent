@@ -1,21 +1,21 @@
 import { useEffect, useState } from 'react'
+import { prefersReducedMotion } from '../theme'
+import { LogoMark, Wordmark } from './Logo'
 import './Splash.css'
 
-const MIN_MS = 1900 // the intro finishes at ~1.6s; hold a beat, then leave
-const FADE_MS = 450
-
-const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches
+const MIN_MS = 1500 // the mark finishes building at ~1.4s
+const FADE_MS = 350
 
 /**
- * Full-page intro on every page load, after the Uiverse logo card (Smit-Prajapati), autoplayed and
- * recoloured to the Rangefinder palette. Stays until `ready` (auth checked) and the intro has played.
+ * Boot screen: the mark builds itself on the page ground, the wordmark fades in beneath it,
+ * a thin progress line fills, then the screen fades away once the session check is done.
  */
 export function Splash({ ready }: { ready: boolean }) {
   const [minDone, setMinDone] = useState(false)
   const [phase, setPhase] = useState<'in' | 'out' | 'gone'>('in')
 
   useEffect(() => {
-    const t = setTimeout(() => setMinDone(true), reduced() ? 300 : MIN_MS)
+    const t = setTimeout(() => setMinDone(true), prefersReducedMotion() ? 200 : MIN_MS)
     return () => clearTimeout(t)
   }, [])
 
@@ -26,7 +26,7 @@ export function Splash({ ready }: { ready: boolean }) {
   // separate effect: the fade timer must not be cancelled by the phase change that starts it
   useEffect(() => {
     if (phase !== 'out') return
-    const t = setTimeout(() => setPhase('gone'), reduced() ? 0 : FADE_MS)
+    const t = setTimeout(() => setPhase('gone'), prefersReducedMotion() ? 0 : FADE_MS)
     return () => clearTimeout(t)
   }, [phase])
 
@@ -38,29 +38,12 @@ export function Splash({ ready }: { ready: boolean }) {
   if (phase === 'gone') return null
   return (
     <div className={`splash ${phase === 'out' ? 'splash--out' : ''}`} role="status" aria-live="polite" aria-label="Loading Rangefinder">
-      <span className="splash-border" aria-hidden />
       <div className="splash-content" aria-hidden>
-        <div className="splash-logo">
-          <span className="splash-mark">
-            <svg viewBox="0 0 24 24">
-              <rect x="3" y="11" width="18" height="2" rx="1" />
-              <circle cx="10" cy="12" r="3.5" />
-            </svg>
-          </span>
-          <span className="splash-word">
-            Rangefinder
-            <span className="splash-trail" />
-          </span>
-        </div>
-        <span className="splash-band">
-          <span className="splash-band-track" />
-          <span className="splash-band-dot" />
-        </span>
-        <span className="splash-tagline">Revenue, as a range</span>
+        <LogoMark size={96} animated loop />
+        <Wordmark className="splash-word mt-5 text-2xl" />
+        <span className="splash-tag">Revenue forecasting under uncertainty</span>
+        <span className="splash-bar" />
       </div>
-      <span className="splash-bottom" aria-hidden>
-        Loading your forecast
-      </span>
     </div>
   )
 }

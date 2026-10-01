@@ -14,6 +14,9 @@ export function money(n: number, compact = true) {
   return `${sign}₹${Math.round(a)}`
 }
 
+/** Signed money: +₹105k / −₹310k. */
+export const signedMoney = (n: number) => (n > 0 ? '+' : '') + money(n)
+
 /** Ledger figure: signed, grouped, no currency symbol. */
 export const figure = (n: number) =>
   (n > 0 ? '+' : n < 0 ? MINUS : '') + Math.abs(Math.round(n)).toLocaleString('en-US')
@@ -27,18 +30,24 @@ export const shortDate = (iso: string) =>
 export function useApi<T>(fn: () => Promise<T>, deps: unknown[]) {
   const [data, setData] = useState<T>()
   const [error, setError] = useState<string>()
+  const [loading, setLoading] = useState(true)
+  const [nonce, setNonce] = useState(0)
   useEffect(() => {
     let live = true
-    fn().then(
-      (d) => live && (setData(d), setError(undefined)),
-      (e: Error) => live && setError(e.message),
-    )
+    setLoading(true)
+    fn()
+      .then(
+        (d) => live && (setData(d), setError(undefined)),
+        (e: Error) => live && setError(e.message),
+      )
+      .finally(() => live && setLoading(false))
     return () => {
       live = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps)
-  return { data, error }
+  }, [...deps, nonce])
+  const retry = useCallback(() => setNonce((n) => n + 1), [])
+  return { data, error, loading, retry }
 }
 
 interface RunState {
@@ -49,8 +58,9 @@ interface RunState {
   updatedAt?: Date
   run: () => void
   bump: () => void
+  dismissError: () => void
 }
-const RunCtx = createContext<RunState>({ runId: 0, running: false, run: () => {}, bump: () => {} })
+const RunCtx = createContext<RunState>({ runId: 0, running: false, run: () => {}, bump: () => {}, dismissError: () => {} })
 export const useRun = () => useContext(RunCtx)
 
 export function RunProvider({ children }: { children: ReactNode }) {
@@ -77,5 +87,6 @@ export function RunProvider({ children }: { children: ReactNode }) {
     setRunId((r) => r + 1)
     setUpdatedAt(new Date())
   }, [])
-  return <RunCtx.Provider value={{ runId, running, error, updatedAt, run, bump }}>{children}</RunCtx.Provider>
+  const dismissError = useCallback(() => setError(undefined), [])
+  return <RunCtx.Provider value={{ runId, running, error, updatedAt, run, bump, dismissError }}>{children}</RunCtx.Provider>
 }

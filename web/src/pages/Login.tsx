@@ -1,16 +1,14 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
-import { Check, Eye, EyeOff, X } from 'lucide-react'
-import { supabase, useAuth } from '../auth'
-import { PillTabs } from '../components/PillNav'
-import { RangeBand } from '../components/RangeBand'
-import { Mark } from '../components/Stage'
-import { PillButton } from '../components/ui'
+import { ArrowLeft, ArrowRight, Check, Circle, Eye, EyeOff, GitCompareArrows, Lock, Mail, ShieldCheck, Sparkles, TrendingUp } from 'lucide-react'
+import { authenticate, useAuth } from '../auth'
+import { DEMO } from '../demo'
+import { LogoMark, Logo, Wordmark } from '../components/Logo'
+import { Button } from '../components/ui'
+import './Login.css'
 
 type Mode = 'signin' | 'signup'
 
-// Mirror these in Supabase > Authentication > Providers > Email > Password requirements,
-// so the rule also holds for anyone calling the Auth API directly.
 const RULES: [label: string, test: (p: string) => boolean][] = [
   ['At least 8 characters', (p) => p.length >= 8],
   ['A capital letter (A–Z)', (p) => /[A-Z]/.test(p)],
@@ -21,207 +19,299 @@ const RULES: [label: string, test: (p: string) => boolean][] = [
 // name@domain.tld, no spaces; the browser's own check allows "a@b"
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 
-const field = 'mt-1.5 w-full rounded-xl border border-forest/20 bg-white px-4 py-3.5 text-base outline-none transition-colors focus:border-forest'
+/* ------------------------------------------------------------------ fields */
 
-export default function LoginPage() {
-  const { session, refresh } = useAuth()
-  const [params] = useSearchParams()
-  const navigate = useNavigate()
-  const [mode, setMode] = useState<Mode>(params.get('mode') === 'signup' ? 'signup' : 'signin')
-  const [email, setEmail] = useState('')
+function EmailField({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div>
+      <label htmlFor={id} className="label">Work email</label>
+      <div className="relative">
+        <Mail size={17} aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint" />
+        <input id={id} type="email" required autoComplete="email" value={value} onChange={(e) => onChange(e.target.value)} placeholder="you@company.com" className="field !pl-10" />
+      </div>
+    </div>
+  )
+}
+
+function PasswordField({ id, value, onChange, mode }: { id: string; value: string; onChange: (v: string) => void; mode: Mode }) {
+  const [show, setShow] = useState(false)
+  return (
+    <div>
+      <div className="flex items-baseline justify-between">
+        <label htmlFor={id} className="label">Password</label>
+
+      </div>
+      <div className="relative">
+        <Lock size={17} aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint" />
+        <input
+          id={id}
+          type={show ? 'text' : 'password'}
+          required
+          minLength={8}
+          autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="••••••••"
+          className="field !px-10"
+        />
+        <button
+          type="button"
+          onClick={() => setShow((s) => !s)}
+          aria-label={show ? 'Hide password' : 'Show password'}
+          aria-pressed={show}
+          className="absolute right-1.5 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-lg text-faint transition-colors hover:bg-surface-2 hover:text-ink"
+        >
+          {show ? <EyeOff size={17} aria-hidden /> : <Eye size={17} aria-hidden />}
+        </button>
+      </div>
+      {mode === 'signup' && <Strength value={value} />}
+      {mode === 'signup' && (
+        <ul className="mt-3 grid grid-cols-1 gap-1 text-xs sm:grid-cols-2" aria-label="Password rules">
+          {RULES.map(([label, test]) => {
+            const ok = test(value)
+            return (
+              <li key={label} className={`flex items-center gap-1.5 transition-colors ${ok ? 'text-gain' : 'text-muted'}`}>
+                {ok ? <Check size={13} aria-hidden /> : <Circle size={11} aria-hidden />}
+                {label}
+                <span className="sr-only">{ok ? 'done' : 'not yet'}</span>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+/** Four-segment strength meter; words carry the meaning, colour backs it up. */
+function Strength({ value }: { value: string }) {
+  const score = [value.length >= 8, /[A-Z]/.test(value) && /[a-z]/.test(value), /\d/.test(value), /[^A-Za-z0-9]/.test(value) || value.length >= 14].filter(Boolean).length
+  const words = ['Too short', 'Weak', 'Fair', 'Good', 'Strong']
+  const tone = score <= 1 ? 'bg-loss' : score === 2 ? 'bg-target' : 'bg-gain'
+  if (!value) return null
+  return (
+    <div className="mt-2 flex items-center gap-3" aria-live="polite">
+      <div aria-hidden className="grid flex-1 grid-cols-4 gap-1">
+        {[0, 1, 2, 3].map((i) => (
+          <span key={i} className={`h-1 rounded-full transition-colors duration-300 ${i < score ? tone : 'bg-surface-2'}`} />
+        ))}
+      </div>
+      <span className="w-16 text-right text-xs text-muted">{words[value.length < 8 ? 0 : score]}</span>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ one form */
+
+interface FormProps {
+  mode: Mode
+  active: boolean
+  email: string
+  setEmail: (v: string) => void
+  onSwitch: () => void
+  onDone: () => void
+  notice?: string
+  setNotice: (n?: string) => void
+}
+
+function AuthForm({ mode, active, email, setEmail, onSwitch, onDone, notice, setNotice }: FormProps) {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
-  const [show, setShow] = useState(false)
-  const [touched, setTouched] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
-  const [notice, setNotice] = useState<string>()
-  const next = params.get('next')?.startsWith('/app') ? params.get('next')! : '/app'
+  const form = useRef<HTMLFormElement>(null)
+  const signin = mode === 'signin'
 
-  if (session) return <Navigate to={next} replace />
-
-  const signup = mode === 'signup'
-  const passed = RULES.map(([, t]) => t(password))
-  const strong = passed.every(Boolean)
-  const emailOk = EMAIL.test(email.trim())
-  const matches = password === confirm
-  const canSubmit = emailOk && password.length > 0 && (!signup || (strong && matches))
-
-  const switchMode = (m: Mode) => {
-    setMode(m)
+  useEffect(() => {
+    if (!active) return
     setError(undefined)
-    setNotice(undefined)
-    setTouched(false)
-  }
+    // focus once the slide has settled, so the caret does not jump mid-motion
+    const t = setTimeout(() => form.current?.querySelector('input')?.focus({ preventScroll: true }), 650)
+    return () => clearTimeout(t)
+  }, [active])
 
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    setTouched(true)
-    if (!canSubmit) return
+    if (!EMAIL.test(email.trim())) return setError('Enter a full email address, like name@company.com.')
+    if (!signin && !RULES.every(([, t]) => t(password))) return setError('The password does not meet every rule yet.')
+    if (!signin && password !== confirm) return setError('Passwords do not match.')
     setBusy(true)
     setError(undefined)
     setNotice(undefined)
-    const creds = { email: email.trim().toLowerCase(), password }
-    const res = signup ? await supabase.auth.signUp(creds) : await supabase.auth.signInWithPassword(creds)
+    const res = await authenticate(mode, email, password)
     setBusy(false)
-    if (res.error) {
-      const m = res.error.message
-      return setError(
-        /invalid login credentials/i.test(m)
-          ? 'Email or password is wrong. New here? Choose Create account.'
-          : /already registered/i.test(m)
-            ? 'An account with this email exists. Choose Sign in.'
-            : /email not confirmed/i.test(m)
-              ? 'Confirm your email first: open the link we sent, then sign in.'
-              : m,
-      )
+    if (res.error) return setError(res.error)
+    if (res.needsConfirm) {
+      setNotice(`Check ${email} for a confirmation link, then sign in here.`)
+      return onSwitch()
     }
-    if (!res.data.session) {
-      // the project requires email confirmation before the first sign-in
-      switchMode('signin')
-      return setNotice(`Account created. Open the confirmation link sent to ${creds.email}, then sign in here.`)
-    }
-    await refresh()
-    navigate(signup ? '/onboarding' : next, { replace: true })
+    onDone()
   }
 
   return (
-    <main className="min-h-screen bg-lime text-forest">
-      <div className="mx-auto grid min-h-screen max-w-[1200px] items-center gap-10 px-4 py-10 lg:grid-cols-[1fr_auto_1fr] lg:gap-16 lg:px-10">
-        {/* brand side */}
-        <section aria-label="Rangefinder" className="flex flex-col items-center text-center lg:items-start lg:text-left">
-          <Link to="/" className="flex items-center gap-4" aria-label="Rangefinder home">
-            <span className="scale-[1.4] lg:scale-[1.7]"><Mark /></span>
-            <span className="ml-2 font-logo text-[44px] leading-none lg:ml-5 lg:text-[60px]">Rangefinder</span>
-          </Link>
-          <p className="mt-6 max-w-[34ch] text-pretty text-lg text-forest/90">
-            Your pipeline, simulated ten thousand times. See where revenue will land, and exactly why it moved.
-          </p>
-          <div className="mt-8 hidden w-full max-w-[420px] rounded-card bg-white/60 p-5 lg:block" aria-hidden>
-            <p className="mb-1 text-xs text-ink/70">Next 30 days, sample company</p>
-            <RangeBand low={1520000} mid={1920000} high={2380000} target={2100000} />
-          </div>
-        </section>
+    <div className={`auth-form mx-auto w-full max-w-[400px] ${active ? 'is-active' : ''}`}>
+      <div className="auth-stagger">
+        <p className="text-sm font-medium text-brand">{signin ? 'Welcome back' : 'Get started free'}</p>
+        <h1 className="mt-2 text-3xl font-semibold">{signin ? 'Sign in to Rangefinder' : 'Create your account'}</h1>
+        <p className="mt-2 text-muted">
+          {signin ? 'Pick up where this week’s forecast left off.' : 'Two minutes to your first honest forecast. You’ll name your workspace next.'}
+        </p>
+      </div>
 
-        {/* divider: vertical on wide screens, horizontal when stacked */}
-        <div aria-hidden className="h-px w-full bg-forest/15 lg:h-[70vh] lg:w-px" />
-
-        {/* form side */}
-        <section className="w-full justify-self-center lg:justify-self-start">
-          <div className="w-full max-w-[500px] rounded-frame bg-white p-7 shadow-[0_24px_60px_-32px_rgba(30,45,38,0.55)] sm:p-10">
-            <h1 className="font-head text-xl font-bold uppercase leading-none">{signup ? 'Start forecasting' : 'Welcome back'}</h1>
-            <p className="mt-2 text-sm text-ink/70">
-              {signup ? 'Create an account. You will name your workspace next.' : 'Sign in to your workspace.'}
-            </p>
-            <div className="mt-7">
-              <PillTabs
-                label="Sign in or create an account"
-                tone="white"
-                value={mode}
-                onChange={switchMode}
-                options={[
-                  { value: 'signin', label: 'Sign in' },
-                  { value: 'signup', label: 'Create account' },
-                ]}
-              />
+      <form onSubmit={submit} className="auth-stagger mt-8 space-y-4" ref={form}>
+        <EmailField id={`${mode}-email`} value={email} onChange={setEmail} />
+        <PasswordField id={`${mode}-password`} value={password} onChange={setPassword} mode={mode} />
+        {!signin && (
+          <div>
+            <label htmlFor="signup-confirm" className="label">Confirm password</label>
+            <div className="relative">
+              <Lock size={17} aria-hidden className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint" />
+              <input id="signup-confirm" type="password" required autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)}
+                placeholder="••••••••" className={`field !pl-10 ${confirm && confirm !== password ? '!border-loss' : ''}`} />
             </div>
-
-            <form onSubmit={submit} noValidate className="mt-7 space-y-5">
-              <label className="block text-sm">
-                Work email
-                <input
-                  type="email"
-                  required
-                  autoComplete="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  aria-invalid={touched && !emailOk}
-                  aria-describedby="email-hint"
-                  className={`${field} ${touched && !emailOk ? 'border-loss' : ''}`}
-                />
-                {touched && !emailOk && (
-                  <span id="email-hint" className="mt-1 block text-xs text-loss">Enter an email like name@company.com.</span>
-                )}
-              </label>
-
-              <label className="block text-sm">
-                Password
-                <span className="relative block">
-                  <input
-                    type={show ? 'text' : 'password'}
-                    required
-                    autoComplete={signup ? 'new-password' : 'current-password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    aria-describedby={signup ? 'pw-rules' : undefined}
-                    aria-invalid={touched && signup && !strong}
-                    className={`${field} pr-12`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShow((s) => !s)}
-                    aria-label={show ? 'Hide password' : 'Show password'}
-                    className="absolute right-2 top-1/2 mt-[3px] grid size-9 -translate-y-1/2 place-items-center rounded-lg text-ink/60 hover:text-ink"
-                  >
-                    {show ? <EyeOff size={18} aria-hidden /> : <Eye size={18} aria-hidden />}
-                  </button>
-                </span>
-              </label>
-
-              {signup && (
-                <>
-                  <div id="pw-rules">
-                    <div className="flex gap-1" aria-hidden>
-                      {passed.map((_, i) => (
-                        <span key={i} className={`h-1.5 flex-1 rounded-full ${passed.filter(Boolean).length > i ? (strong ? 'bg-gain' : 'bg-forest') : 'bg-hair'}`} />
-                      ))}
-                    </div>
-                    <p className="mt-2 text-xs font-medium">
-                      {strong ? 'Strong password' : `Password needs ${RULES.length - passed.filter(Boolean).length} more`}
-                    </p>
-                    <ul className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
-                      {RULES.map(([label], i) => (
-                        <li key={label} className={`flex items-center gap-1.5 ${passed[i] ? 'text-gain' : touched ? 'text-loss' : 'text-ink/70'}`}>
-                          {passed[i] ? <Check size={14} aria-hidden /> : <X size={14} aria-hidden />}
-                          <span>
-                            {label}
-                            <span className="sr-only">{passed[i] ? ', done' : ', missing'}</span>
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <label className="block text-sm">
-                    Confirm password
-                    <input
-                      type={show ? 'text' : 'password'}
-                      required
-                      autoComplete="new-password"
-                      value={confirm}
-                      onChange={(e) => setConfirm(e.target.value)}
-                      aria-invalid={touched && !matches}
-                      className={`${field} ${touched && confirm && !matches ? 'border-loss' : ''}`}
-                    />
-                    {confirm && !matches && <span className="mt-1 block text-xs text-loss">Passwords do not match yet.</span>}
-                  </label>
-                </>
-              )}
-
-              <div aria-live="polite">
-                {error && <p role="alert" className="text-sm text-loss">{error}</p>}
-                {notice && <p className="text-sm text-gain">{notice}</p>}
-              </div>
-
-              <PillButton type="submit" busy={busy} className="w-full justify-center !py-3.5">
-                {signup ? 'Create account' : 'Sign in'}
-              </PillButton>
-            </form>
+            {confirm && confirm !== password && <p className="mt-1 text-xs text-loss">Passwords do not match yet.</p>}
           </div>
-          <p className="mt-6 max-w-[500px] text-center text-sm">
-            <Link to="/" className="underline decoration-forest/30 underline-offset-4 hover:decoration-forest">Back to Rangefinder</Link>
+        )}
+        <div aria-live="polite" className="min-h-[20px]">
+          {error && <p role="alert" className="write-in text-sm text-loss">{error}</p>}
+          {signin && notice && <p className="write-in text-sm text-gain">{notice}</p>}
+        </div>
+        <Button type="submit" busy={busy} size="lg" className="w-full" arrow>
+          {busy ? (signin ? 'Signing in' : 'Creating account') : signin ? 'Sign in' : 'Create account'}
+        </Button>
+      </form>
+
+      <p className="auth-stagger mt-6 text-center text-sm text-muted">
+        {signin ? 'New to Rangefinder? ' : 'Already have an account? '}
+        <button type="button" onClick={onSwitch} className="link">
+          {signin ? 'Create an account' : 'Sign in'}
+        </button>
+      </p>
+      {DEMO && (
+        <p className="auth-stagger mt-5 flex items-start gap-2 rounded-lg border border-line bg-surface-2 p-3 text-xs text-muted">
+          <Sparkles size={14} aria-hidden className="mt-0.5 shrink-0 text-brand" />
+          Demo mode: any email and 8-character password work. {signin ? 'Signing in opens a ready sample workspace.' : 'A new account walks you through setup.'}
+        </p>
+      )}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ middle panel */
+
+const POINTS = [
+  { icon: TrendingUp, text: 'Best, expected and worst case for 30, 60 and 90 days' },
+  { icon: GitCompareArrows, text: 'Every change since last week, named deal by deal' },
+  { icon: ShieldCheck, text: 'Backtested: see how often the range was right' },
+]
+
+function BrandPanel({ mode, onSwitch }: { mode: Mode; onSwitch: () => void }) {
+  const signin = mode === 'signin'
+  return (
+    <div className="relative flex h-full flex-col items-center justify-center glass border-y-0 px-10 text-center">
+      <div className="relative flex max-w-[380px] flex-col items-center">
+        {/* re-keyed so the mark rebuilds itself on every switch */}
+        <LogoMark key={mode} size={128} animated title="Rangefinder" />
+        <Wordmark className="mt-5 text-3xl" />
+        <p className="mt-2 text-sm text-muted">Revenue forecasting under uncertainty</p>
+
+        <div key={`cta-${mode}`} className="brand-swap mt-10 w-full rounded-card border border-line bg-surface p-6 shadow-card">
+          <p className="text-lg font-semibold">{signin ? 'New to Rangefinder?' : 'Already have an account?'}</p>
+          <p className="mt-1 text-sm text-muted">
+            {signin ? 'Create a workspace and see next quarter as a range in minutes.' : 'Sign in to see what moved since your last forecast.'}
           </p>
-        </section>
+          <button type="button" onClick={onSwitch} className="btn btn-secondary group mt-5 w-full">
+            {!signin && <ArrowLeft size={16} aria-hidden className="transition-transform group-hover:-translate-x-0.5" />}
+            {signin ? 'Create an account' : 'Sign in'}
+            {signin && <ArrowRight size={16} aria-hidden className="transition-transform group-hover:translate-x-0.5" />}
+          </button>
+        </div>
+
+        <ul className="mt-8 w-full space-y-3 text-left text-sm text-muted">
+          {POINTS.map(({ icon: Icon, text }) => (
+            <li key={text} className="flex items-center gap-3">
+              <Icon size={16} aria-hidden className="shrink-0 text-brand" />
+              {text}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ page */
+
+/**
+ * Sign in / create account on one sliding track: [sign-in form | Rangefinder panel | sign-up form].
+ * Two thirds are visible at a time. Choosing "create account" slides everything left, so the fields
+ * move left and the logo panel sits in the middle of the track, between the two forms.
+ * Below lg the panel folds into a header and the two forms slide as a pair.
+ */
+export default function LoginPage() {
+  const { session, refresh } = useAuth()
+  const [params, setParams] = useSearchParams()
+  const navigate = useNavigate()
+  const [mode, setMode] = useState<Mode>(params.get('mode') === 'signup' ? 'signup' : 'signin')
+  const [email, setEmail] = useState('')
+  const [notice, setNotice] = useState<string>()
+  const next = params.get('next')?.startsWith('/app') ? params.get('next')! : '/app'
+
+  useEffect(() => void (document.title = mode === 'signin' ? 'Sign in · Rangefinder' : 'Create account · Rangefinder'), [mode])
+
+  if (session) return <Navigate to={next} replace />
+
+  const switchTo = (m: Mode) => {
+    setMode(m)
+    const p = new URLSearchParams(params)
+    if (m === 'signup') p.set('mode', 'signup')
+    else p.delete('mode')
+    setParams(p, { replace: true })
+  }
+  const done = async () => {
+    await refresh()
+    navigate(next, { replace: true })
+  }
+  const signup = mode === 'signup'
+
+  return (
+    <main className="relative min-h-dvh overflow-clip">
+      {/* compact header for small screens; the middle panel carries the brand on large ones */}
+      <header className="glass border-x-0 border-t-0 px-5 pb-5 pt-5 lg:hidden">
+        <div className="flex items-center justify-between">
+          <Link to="/" aria-label="Rangefinder home" className="rounded-md">
+            <Logo size={30} wordClass="text-[18px]" />
+          </Link>
+          <Link to="/" className="text-sm text-muted hover:text-ink">Home</Link>
+        </div>
+        <div className="relative mt-5 flex rounded-lg border border-line bg-surface-2 p-0.5" role="tablist" aria-label="Sign in or create an account">
+          <span aria-hidden className={`absolute inset-y-0.5 left-0.5 w-[calc(50%-2px)] rounded-md bg-surface shadow-[0_1px_2px_rgb(var(--shadow)/0.1),0_0_0_1px_rgb(var(--line))] transition-transform duration-300 ease-out ${signup ? 'translate-x-full' : ''}`} />
+          {(['signin', 'signup'] as const).map((m) => (
+            <button key={m} type="button" role="tab" aria-selected={mode === m} onClick={() => switchTo(m)} className={`relative z-10 h-9 flex-1 rounded-md text-sm font-medium transition-colors ${mode === m ? 'text-ink' : 'text-muted'}`}>
+              {m === 'signin' ? 'Sign in' : 'Create account'}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      <Link to="/" className="absolute left-6 top-6 z-20 hidden items-center gap-2 rounded-lg text-sm text-muted transition-colors hover:text-ink lg:inline-flex" style={{ opacity: signup ? 0 : 1, pointerEvents: signup ? 'none' : 'auto' }}>
+        <ArrowLeft size={16} aria-hidden /> Back to home
+      </Link>
+
+      <div className="relative overflow-clip lg:min-h-dvh">
+        <div className={`auth-track flex w-[200%] lg:min-h-dvh lg:w-[150%] ${signup ? 'is-signup' : ''}`}>
+          <section inert={signup} aria-hidden={signup} className="flex w-1/2 items-center px-5 py-10 sm:px-10 lg:w-1/3 lg:px-16">
+            <AuthForm mode="signin" active={!signup} email={email} setEmail={setEmail} onSwitch={() => switchTo('signup')} onDone={done} notice={notice} setNotice={setNotice} />
+          </section>
+
+          <section aria-label="Rangefinder" className="hidden lg:block lg:w-1/3">
+            <BrandPanel mode={mode} onSwitch={() => switchTo(signup ? 'signin' : 'signup')} />
+          </section>
+
+          <section inert={!signup} aria-hidden={!signup} className="flex w-1/2 items-center px-5 py-10 sm:px-10 lg:w-1/3 lg:px-16">
+            <AuthForm mode="signup" active={signup} email={email} setEmail={setEmail} onSwitch={() => switchTo('signin')} onDone={done} notice={notice} setNotice={setNotice} />
+          </section>
+        </div>
       </div>
     </main>
   )

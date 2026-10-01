@@ -1,0 +1,151 @@
+/* Loaders and the animated logo. Every loop stops under prefers-reduced-motion (see index.css). */
+
+.rf-spin {
+  animation: rf-spin 800ms linear infinite;
+}
+@keyframes rf-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* typing dots */
+.rf-dots > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+  animation: rf-dot 1s ease-in-out infinite;
+}
+.rf-dots > span:nth-child(2) { animation-delay: 140ms; }
+.rf-dots > span:nth-child(3) { animation-delay: 280ms; }
+@keyframes rf-dot {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.35; }
+  40% { transform: translateY(-3px); opacity: 1; }
+}
+
+/* route change bar */
+.rf-top-progress {
+  position: fixed;
+  inset: 0 0 auto 0;
+  height: 2px;
+  z-index: 90;
+  pointer-events: none;
+  background: rgb(var(--brand));
+  transform-origin: left;
+  animation: rf-progress 600ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes rf-progress {
+  0% { transform: scaleX(0); opacity: 1; }
+  70% { transform: scaleX(0.85); opacity: 1; }
+  100% { transform: scaleX(1); opacity: 0; }
+}
+
+/* indeterminate line */
+.rf-line {
+  position: relative;
+}
+.rf-line::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 35%;
+  border-radius: inherit;
+  background: rgb(var(--brand));
+  animation: rf-slide 1.3s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@keyframes rf-slide {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(290%); }
+}
+
+/* ------------------------------------------------------------------ logo
+   Build: the stem rises, the bowl sweeps across, the leg settles, then the fan unfolds from the
+   R's junction (worst, expected, best), the median path draws and its three points land.
+   Loop: after the build the fan folds and re-opens and the points re-land — reads as "simulating". */
+
+.rl-build .rl-stem {
+  transform-origin: 350px 978px;
+  animation: rl-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.rl-build .rl-top {
+  transform-origin: 268px 314px;
+  animation: rl-sweep 520ms cubic-bezier(0.22, 1, 0.36, 1) 160ms both;
+}
+.rl-build .rl-leg {
+  animation: rl-settle 520ms cubic-bezier(0.22, 1, 0.36, 1) 300ms both;
+}
+.rl-wedge {
+  transform-origin: 486px 566px;
+}
+.rl-build .rl-w3 { animation: rl-unfold 560ms cubic-bezier(0.22, 1, 0.36, 1) 520ms both; }
+.rl-build .rl-w2 { animation: rl-unfold 560ms cubic-bezier(0.22, 1, 0.36, 1) 600ms both; }
+.rl-build .rl-w1 { animation: rl-unfold 560ms cubic-bezier(0.22, 1, 0.36, 1) 680ms both; }
+.rl-build .rl-line {
+  stroke-dasharray: 1;
+  animation: rl-draw 600ms cubic-bezier(0.65, 0, 0.35, 1) 820ms both;
+}
+.rl-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.rl-build .rl-d1 { animation: rl-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1) 960ms both; }
+.rl-build .rl-d2 { animation: rl-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1) 1080ms both; }
+.rl-build .rl-d3 { animation: rl-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1) 1200ms both; }
+
+@keyframes rl-rise {
+  from { transform: scaleY(0); }
+}
+@keyframes rl-sweep {
+  from { transform: scaleX(0); }
+}
+@keyframes rl-settle {
+  from { transform: translate(-60px, -60px); opacity: 0; }
+}
+@keyframes rl-unfold {
+  from { transform: rotate(-18deg) scale(0.2); opacity: 0; }
+}
+@keyframes rl-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes rl-pop {
+  from { transform: scale(0); }
+}
+
+/* loop (after a 1.6s build) */
+.rl-loop .rl-w3 { animation: rl-fan-cycle 2.4s cubic-bezier(0.65, 0, 0.35, 1) 1.6s infinite; }
+.rl-loop .rl-w2 { animation: rl-fan-cycle 2.4s cubic-bezier(0.65, 0, 0.35, 1) 1.68s infinite; }
+.rl-loop .rl-w1 { animation: rl-fan-cycle 2.4s cubic-bezier(0.65, 0, 0.35, 1) 1.76s infinite; }
+.rl-loop .rl-line {
+  stroke-dasharray: 1;
+  animation: rl-line-cycle 2.4s cubic-bezier(0.65, 0, 0.35, 1) 1.6s infinite;
+}
+.rl-loop .rl-d1 { animation: rl-dot-cycle 2.4s ease 1.6s infinite; }
+.rl-loop .rl-d2 { animation: rl-dot-cycle 2.4s ease 1.72s infinite; }
+.rl-loop .rl-d3 { animation: rl-dot-cycle 2.4s ease 1.84s infinite; }
+.rl-build.rl-loop .rl-w1,
+.rl-build.rl-loop .rl-w2,
+.rl-build.rl-loop .rl-w3 {
+  animation: rl-unfold 560ms cubic-bezier(0.22, 1, 0.36, 1) 520ms both, rl-fan-cycle 2.4s cubic-bezier(0.65, 0, 0.35, 1) 1.6s infinite;
+}
+.rl-build.rl-loop .rl-line {
+  animation: rl-draw 600ms cubic-bezier(0.65, 0, 0.35, 1) 820ms both, rl-line-cycle 2.4s cubic-bezier(0.65, 0, 0.35, 1) 1.6s infinite;
+}
+.rl-build.rl-loop .rl-d1 { animation: rl-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1) 960ms both, rl-dot-cycle 2.4s ease 1.6s infinite; }
+.rl-build.rl-loop .rl-d2 { animation: rl-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1) 1080ms both, rl-dot-cycle 2.4s ease 1.72s infinite; }
+.rl-build.rl-loop .rl-d3 { animation: rl-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1) 1200ms both, rl-dot-cycle 2.4s ease 1.84s infinite; }
+
+@keyframes rl-fan-cycle {
+  0%, 55%, 100% { transform: none; opacity: 1; }
+  72% { transform: scale(0.35); opacity: 0.2; }
+  85% { transform: scale(1.03); opacity: 1; }
+}
+@keyframes rl-line-cycle {
+  0%, 55% { stroke-dashoffset: 0; }
+  70% { stroke-dashoffset: 1; }
+  100% { stroke-dashoffset: 0; }
+}
+@keyframes rl-dot-cycle {
+  0%, 55%, 100% { transform: scale(1); }
+  70% { transform: scale(0); }
+  90% { transform: scale(1.15); }
+}

@@ -1,6 +1,6 @@
-import { useEffect, useState, type ChangeEvent } from 'react'
+import { useEffect, useState, type DragEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle2, FileUp, Sparkles } from 'lucide-react'
+import { CheckCircle2, Download, FileSpreadsheet, FileUp, History as HistoryIcon, Inbox, Sparkles, Target as TargetIcon, Upload as UploadIcon } from 'lucide-react'
 import { api, ApiError, type ImportResult, type Target } from '../api/client'
 import { useAuth } from '../auth'
 import { downloadTemplate, guessMapping, OPTIONAL, parseCSV, REQUIRED } from '../csv'
@@ -8,13 +8,14 @@ import { autoFix } from '../tidy'
 import { ImportReview, type Parsed } from '../components/ImportReview'
 import { NovaSync } from '../components/NovaSync'
 import { money, useApi, useRun } from '../lib'
-import { PillTabs } from '../components/PillNav'
-import { Stage } from '../components/Stage'
-import { ErrorNote, HighlightWord, PillButton, Skeleton } from '../components/ui'
+import { PageHeader } from '../components/AppShell'
+import { PipelineChanges } from '../components/DealTimeline'
+import { EngineLoader, StepProgress, TableSkeleton } from '../components/Loaders'
+import { Button, Card, EmptyState, ErrorNote, Segmented } from '../components/ui'
 
 type Tab = 'upload' | 'history' | 'targets'
 
-const input = 'w-full rounded-xl border border-forest/20 bg-white px-3 py-2.5 text-sm outline-none focus:border-forest'
+const STEPS = ['Saving deals', 'Learning from closed history', 'Calibrating reps and timing', 'Simulating 10,000 futures', 'Explaining what changed']
 
 function Upload() {
   const { me, refresh } = useAuth()
@@ -25,33 +26,39 @@ function Upload() {
   const [result, setResult] = useState<ImportResult>()
   const [error, setError] = useState<{ message: string; details?: string[] }>()
   const [confirmSample, setConfirmSample] = useState(false)
+  const [drag, setDrag] = useState(false)
   const deals = me?.workspace?.deals ?? 0
 
-  const pick = async (e: ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0]
-    e.target.value = ''
+  const load = async (f?: File) => {
     if (!f) return
     setError(undefined)
     setResult(undefined)
+    if (!/\.csv$/i.test(f.name) && f.type !== 'text/csv') return setError({ message: `${f.name} is not a CSV. Export your pipeline as CSV and try again.` })
     if (f.size > 10_000_000) return setError({ message: `${f.name} is ${(f.size / 1e6).toFixed(1)} MB. The limit is 10 MB.` })
     const [headers, ...rows] = parseCSV(await f.text())
     if (!headers || !rows.length) return setError({ message: `${f.name} has no data rows. Export it again with a header row and at least one deal.` })
     setFile({ filename: f.name, headers, rows, fx: autoFix(headers, rows, guessMapping(headers)) })
   }
+  const onDrop = (e: DragEvent) => {
+    e.preventDefault()
+    setDrag(false)
+    load(e.dataTransfer.files?.[0])
+  }
 
   const { data: ai } = useApi(() => api.ai().catch(() => ({ provider: null, name: null })), [])
+  const { data: nova } = useApi(() => api.nova().catch(() => ({ available: true, server_key: false })), [])
 
   const finish = async () => {
     await refresh()
     bump()
   }
 
-  const doImport = async (rows: Record<string, string>[]) => {
+  const doImport = async (mapped: Record<string, string>[]) => {
     if (!file) return
     setPhase('importing')
     setError(undefined)
     try {
-      const r = await api.importRows(file.filename, rows)
+      const r = await api.importRows(file.filename, mapped)
       setResult(r)
       setPhase('done')
       await finish()
@@ -61,7 +68,6 @@ function Upload() {
     }
   }
 
-  const { data: nova } = useApi(() => api.nova().catch(() => ({ available: true, server_key: false })), [])
   const doSample = async (kind?: 'aczen') => {
     setPhase('sample')
     setError(undefined)
@@ -77,48 +83,48 @@ function Upload() {
 
   if (phase === 'importing' || phase === 'sample')
     return (
-      <div role="status" className="grid min-h-[320px] place-items-center text-center">
-        <div>
-          <span aria-hidden className="mx-auto mb-4 block size-10 animate-spin rounded-full border-4 border-hair border-t-forest motion-reduce:animate-none" />
-          <p className="font-head text-lg font-bold">{phase === 'sample' ? 'Building the sample company' : `Importing ${(file?.rows.length ?? 0).toLocaleString('en-US')} deals`}</p>
-          <p className="mt-1 max-w-[46ch] text-sm text-ink/70">
-            Saving deals, learning from closed history, then simulating 10,000 futures. This takes about 15 seconds.
-          </p>
+      <Card>
+        <div className="py-6 text-center">
+          <EngineLoader
+            title={phase === 'sample' ? 'Building the sample company' : `Importing ${(file?.rows.length ?? 0).toLocaleString('en-US')} deals`}
+            note="Saving deals, learning from closed history, then simulating 10,000 futures. This takes about 15 seconds."
+          />
+          <StepProgress steps={phase === 'sample' ? ['Creating two years of history', ...STEPS.slice(1)] : STEPS} every={phase === 'sample' ? 700 : 650} />
         </div>
-      </div>
+      </Card>
     )
 
   if (phase === 'done' && result)
     return (
-      <div className="space-y-6">
-        <div className="flex items-start gap-3">
-          <CheckCircle2 aria-hidden className="mt-0.5 shrink-0 text-gain" />
-          <div>
-            <h2 className="font-head text-lg font-bold">Imported {file?.filename}</h2>
-            <p className="mt-1 text-sm text-ink/70">
-              {result.created.toLocaleString('en-US')} new deals, {result.updated.toLocaleString('en-US')} updated
-              {result.missing ? `, ${result.missing} open deals were not in this file and were left as they are` : ''}.
-            </p>
+      <Card>
+        <div className="flex flex-col items-center py-8 text-center">
+          <span className="grid size-14 animate-[rise_400ms_ease-out_both] place-items-center rounded-full bg-gain/10 text-gain">
+            <CheckCircle2 size={30} aria-hidden />
+          </span>
+          <h2 className="mt-4 text-xl font-semibold">Imported {file?.filename}</h2>
+          <p className="mt-1 max-w-[52ch] text-sm text-muted">
+            {result.created.toLocaleString('en-US')} new deals, {result.updated.toLocaleString('en-US')} updated
+            {result.missing ? `, ${result.missing} open deals were not in this file and were left as they are` : ''}.
+          </p>
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            {result.run_error ? (
+              <ErrorNote>The data is saved, but the forecast could not run. {result.run_error}</ErrorNote>
+            ) : (
+              <Button onClick={() => navigate('/app')} arrow>Open dashboard</Button>
+            )}
+            <Button variant="secondary" icon={UploadIcon} onClick={() => (setPhase('idle'), setFile(undefined))}>Upload another file</Button>
           </div>
         </div>
-        {result.run_error ? (
-          <ErrorNote>The data is saved, but the forecast could not run. {result.run_error}</ErrorNote>
-        ) : (
-          <PillButton onClick={() => navigate('/app')}>Open dashboard</PillButton>
-        )}
-        <button type="button" onClick={() => (setPhase('idle'), setFile(undefined))} className="block text-sm underline decoration-forest/30 underline-offset-4">
-          Upload another file
-        </button>
-      </div>
+      </Card>
     )
 
   return (
     <div className="space-y-6">
       {error && (
-        <div role="alert" className="rounded-card border border-loss/40 bg-white p-4 text-sm">
-          <p className="text-loss">{error.message}</p>
+        <div role="alert" className="card border-loss/30 p-4 text-sm">
+          <p className="font-medium text-loss">{error.message}</p>
           {error.details && (
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-ink/80">
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-muted">
               {error.details.map((d) => <li key={d}>{d}</li>)}
             </ul>
           )}
@@ -127,53 +133,71 @@ function Upload() {
 
       {!file && <NovaSync onDone={async () => (await finish(), navigate('/app'))} />}
       {!file ? (
-        <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-          <label className="group flex min-h-[240px] cursor-pointer flex-col items-center justify-center rounded-card border-2 border-dashed border-forest/25 bg-lime/15 p-6 text-center transition-colors hover:border-forest/50 hover:bg-lime/30 focus-within:border-forest">
-            <FileUp aria-hidden className="mb-3 size-8 text-forest" />
-            <span className="font-head text-lg font-bold">Upload your pipeline CSV</span>
-            <span className="mt-1 max-w-[42ch] text-sm text-ink/70">
-              Open deals plus at least 200 closed ones (won and lost), so the model can learn how your deals really behave.
+        <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
+          <label
+            onDragOver={(e) => (e.preventDefault(), setDrag(true))}
+            onDragLeave={() => setDrag(false)}
+            onDrop={onDrop}
+            className={`group relative flex min-h-[300px] cursor-pointer flex-col items-center justify-center overflow-hidden rounded-card border border-dashed p-8 text-center transition-all duration-300 focus-within:border-brand ${
+              drag ? 'border-brand bg-brand-soft/60' : 'border-faint/40 bg-surface hover:border-brand/60 hover:bg-brand-soft/30'
+            }`}
+          >
+                        <span className={`relative grid size-12 place-items-center rounded-lg border border-line bg-surface-2 text-brand transition-transform duration-200 ${drag ? '-translate-y-1' : 'group-hover:-translate-y-0.5'}`}>
+              <FileUp size={22} aria-hidden />
             </span>
-            <span className="btn-lift mt-4 pointer-events-none">Choose a CSV file</span>
-            <input type="file" accept=".csv,text/csv" onChange={pick} className="sr-only" />
+            <span className="relative mt-4 text-lg font-semibold">{drag ? 'Drop to upload' : 'Upload your pipeline CSV'}</span>
+            <span className="relative mt-1.5 max-w-[46ch] text-sm text-muted">
+              Drag a file here or browse. Open deals plus at least 200 closed ones (won and lost), so the model learns how your deals really behave.
+            </span>
+            <span className="btn btn-primary pointer-events-none relative mt-6">
+              <UploadIcon size={17} aria-hidden /> Choose a CSV file
+            </span>
+            <input type="file" accept=".csv,text/csv" onChange={(e) => (load(e.target.files?.[0]), (e.target.value = ''))} className="sr-only" />
           </label>
-          <div className="flex flex-col justify-between rounded-card border border-hair p-6">
-            <div>
-              <Sparkles aria-hidden className="mb-3 size-6 text-forest" />
-              <h2 className="font-head text-lg font-bold">No file yet?</h2>
-              <p className="mt-1 text-sm text-ink/70">
-                Load a sample company: two years of history, 150 open deals and a week of changes, so every screen has a story.
-                {nova?.server_key && ' Or the Aczen demo: the same simulated history built on your real Aczen clients, reps and payment terms, with monthly rep commits.'}
-              </p>
-            </div>
-            {confirmSample ? (
-              <div className="mt-4 space-y-3">
-                <p className="text-sm text-loss">This replaces all {deals.toLocaleString('en-US')} deals and forecasts in this workspace.</p>
-                <div className="flex flex-wrap gap-2">
-                  <PillButton onClick={() => doSample()} icon={false}>Replace with sample</PillButton>
-                  {nova?.server_key && <PillButton onClick={() => doSample('aczen')} icon={false}>Replace with Aczen demo</PillButton>}
-                  <PillButton variant="secondary" icon={false} onClick={() => setConfirmSample(false)}>Keep my data</PillButton>
+
+          <div className="flex flex-col gap-6">
+            <Card className="flex-1">
+              <Sparkles size={20} aria-hidden className="text-brand" />
+              <h2 className="mt-3 text-md font-semibold">No file yet?</h2>
+              <p className="mt-1 text-sm text-muted">Load a sample company: two years of history, 150 open deals and a week of changes, so every screen has a story.
+                {nova?.server_key && ' Or the Aczen demo: the same simulated history built on your real Aczen clients, reps and payment terms, with monthly rep commits.'}</p>
+              {confirmSample ? (
+                <div className="write-in mt-4 space-y-3 rounded-xl bg-loss/10 p-3">
+                  <p className="text-sm text-loss">This replaces all {deals.toLocaleString('en-US')} deals and forecasts in this workspace.</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button onClick={() => doSample()} size="sm">Replace with sample</Button>
+                    {nova?.server_key && <Button onClick={() => doSample('aczen')} size="sm">Replace with Aczen demo</Button>}
+                    <Button variant="secondary" size="sm" onClick={() => setConfirmSample(false)}>Keep my data</Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-5 flex flex-wrap gap-2">
+                  <Button variant="secondary" arrow onClick={() => (deals ? setConfirmSample(true) : doSample())}>
+                    Load sample company
+                  </Button>
+                  {nova?.server_key && (
+                    <Button variant="secondary" arrow onClick={() => (deals ? setConfirmSample(true) : doSample('aczen'))}>
+                      Load Aczen demo
+                    </Button>
+                  )}
+                </div>
+              )}
+            </Card>
+            <Card>
+              <div className="flex items-start gap-3">
+                <FileSpreadsheet size={20} aria-hidden className="mt-0.5 shrink-0 text-brand" />
+                <div className="text-sm">
+                  <p className="font-medium">Columns we read</p>
+                  <p className="mt-1 text-muted">
+                    {REQUIRED.join(', ')}; optional {OPTIONAL.join(', ')}. Dates as YYYY-MM-DD.
+                  </p>
+                  <Button variant="ghost" size="sm" icon={Download} onClick={downloadTemplate} className="-ml-3 mt-2 !text-brand">
+                    Download the template
+                  </Button>
                 </div>
               </div>
-            ) : (
-              <div className="mt-4 flex flex-wrap gap-2">
-                <PillButton variant="secondary" onClick={() => (deals ? setConfirmSample(true) : doSample())}>
-                  Load sample company
-                </PillButton>
-                {nova?.server_key && (
-                  <PillButton variant="secondary" onClick={() => (deals ? setConfirmSample(true) : doSample('aczen'))}>
-                    Load Aczen demo
-                  </PillButton>
-                )}
-              </div>
-            )}
+            </Card>
           </div>
-          <p className="text-sm text-ink/70 lg:col-span-2">
-            Columns: {REQUIRED.join(', ')}; optional {OPTIONAL.join(', ')}. Dates as YYYY-MM-DD.{' '}
-            <button type="button" onClick={downloadTemplate} className="font-medium text-forest underline decoration-forest/30 underline-offset-4">
-              Download the template
-            </button>
-          </p>
         </div>
       ) : (
         <ImportReview file={file} setFile={setFile} aiName={ai?.name ?? null} onImport={doImport} onCancel={() => setFile(undefined)} />
@@ -184,45 +208,54 @@ function Upload() {
 
 function History() {
   const { runId } = useRun()
-  const { data, error } = useApi(() => api.imports(), [runId])
-  if (error) return <ErrorNote>Upload history did not load. {error}</ErrorNote>
-  if (!data) return <Skeleton label="Loading upload history" />
-  if (!data.length) return <p className="py-10 text-center text-sm">No uploads yet. Upload a CSV or load the sample company to start.</p>
+  const { data, error, retry } = useApi(() => api.imports(), [runId])
+  if (error) return <ErrorNote retry={retry}>Upload history did not load. {error}</ErrorNote>
+  if (!data) return <TableSkeleton rows={4} />
+  if (!data.length)
+    return (
+      <Card>
+        <EmptyState icon={Inbox} title="No uploads yet">Upload a CSV or load the sample company to start.</EmptyState>
+      </Card>
+    )
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full min-w-[640px] text-sm">
-        <thead>
-          <tr className="border-b border-ink text-left text-xs text-ink/70">
-            {['When', 'Source', 'Rows', 'New', 'Updated', 'Not in file'].map((h, i) => (
-              <th key={h} scope="col" className={`py-2 pr-4 font-normal ${i > 1 ? 'text-right' : ''}`}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((r) => (
-            <tr key={r.id} className="border-b border-hair last:border-0">
-              <td className="py-2.5 pr-4">{new Date(r.uploaded_at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
-              <td className="py-2.5 pr-4">{r.source === 'sample' ? 'Sample company' : r.source === 'nova' ? 'Aczen Nova sync' : r.filename}</td>
-              {[r.rows, r.created, r.updated, r.missing].map((n, i) => <td key={i} className="py-2.5 pr-4 text-right">{n.toLocaleString('en-US')}</td>)}
+    <Card pad={false} title="Uploads" sub="Each file and sample load, newest first">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[640px] text-sm">
+          <thead>
+            <tr className="border-y border-line text-left text-xs text-faint">
+              {['When', 'Source', 'Rows', 'New', 'Updated', 'Not in file'].map((h, i) => (
+                <th key={h} scope="col" className={`px-6 py-3 font-medium ${i > 1 ? 'text-right' : ''}`}>{h}</th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {data.map((r, i) => (
+              <tr key={r.id} className="write-in border-b border-line/70 last:border-0 hover:bg-surface-2/70" style={{ animationDelay: `${i * 50}ms` }}>
+                <td className="px-6 py-3">{new Date(r.uploaded_at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
+                <td className="px-6 py-3">
+                  <span className={`chip ${r.source === 'csv' ? 'chip-neutral' : 'chip-brand'}`}>{r.source === 'sample' ? 'Sample company' : r.source === 'nova' ? 'Aczen Nova sync' : r.filename}</span>
+                </td>
+                {[r.rows, r.created, r.updated, r.missing].map((n, k) => <td key={k} className="px-6 py-3 text-right">{n.toLocaleString('en-US')}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   )
 }
 
 function Targets() {
   const { bump } = useRun()
-  const { data, error } = useApi(() => api.targets(), [])
+  const { data, error, retry } = useApi(() => api.targets(), [])
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [state, setState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [saveError, setSaveError] = useState<string>()
   useEffect(() => {
     if (data) setDraft(Object.fromEntries(data.map((t) => [`${t.basis}-${t.horizon}`, String(Math.round(t.amount))])))
   }, [data])
-  if (error) return <ErrorNote>Targets did not load. {error}</ErrorNote>
-  if (!data) return <Skeleton label="Loading targets" />
+  if (error) return <ErrorNote retry={retry}>Targets did not load. {error}</ErrorNote>
+  if (!data) return <TableSkeleton rows={2} />
 
   const save = async () => {
     setState('saving')
@@ -241,41 +274,45 @@ function Targets() {
   }
 
   return (
-    <div className="max-w-[640px] space-y-5">
-      <p className="text-sm text-ink/70">Targets set the dashed line and the chance of hitting it. New targets apply from the next forecast run.</p>
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-xs text-ink/70">
-            <th scope="col" className="pb-2 font-normal"><span className="sr-only">Basis</span></th>
-            {[30, 60, 90].map((h) => <th key={h} scope="col" className="pb-2 pl-2 font-normal">Next {h} days</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {(['bookings', 'cash'] as const).map((b) => (
-            <tr key={b}>
-              <th scope="row" className="py-1.5 pr-2 text-left font-medium capitalize">{b}</th>
-              {[30, 60, 90].map((h) => (
-                <td key={h} className="py-1.5 pl-2">
-                  <input
-                    aria-label={`${b} target, next ${h} days, in rupees`}
-                    inputMode="numeric"
-                    value={draft[`${b}-${h}`] ?? ''}
-                    onChange={(e) => (setDraft((d) => ({ ...d, [`${b}-${h}`]: e.target.value.replace(/[^0-9]/g, '') })), setState('idle'))}
-                    className={input}
-                  />
-                  {draft[`${b}-${h}`] && <span className="mt-1 block text-xs text-ink/60">{money(Number(draft[`${b}-${h}`]))}</span>}
-                </td>
-              ))}
+    <Card title="Revenue targets" sub="Targets set the dashed line and the chance of hitting it. New targets apply from the next forecast run." className="max-w-3xl">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px] text-sm">
+          <thead>
+            <tr className="text-left text-xs text-faint">
+              <th scope="col" className="pb-2 font-medium"><span className="sr-only">Basis</span></th>
+              {[30, 60, 90].map((h) => <th key={h} scope="col" className="pb-2 pl-2 font-medium">Next {h} days</th>)}
             </tr>
-          ))}
-        </tbody>
-      </table>
-      {saveError && <p role="alert" className="text-sm text-loss">{saveError}</p>}
-      <div className="flex items-center gap-3">
-        <PillButton onClick={save} busy={state === 'saving'} icon={false}>Save targets</PillButton>
-        <span aria-live="polite" className="text-sm text-gain">{state === 'saved' ? 'Saved. Run the forecast to apply them.' : ''}</span>
+          </thead>
+          <tbody>
+            {(['bookings', 'cash'] as const).map((b) => (
+              <tr key={b}>
+                <th scope="row" className="py-2 pr-2 text-left font-semibold capitalize">{b}</th>
+                {[30, 60, 90].map((h) => (
+                  <td key={h} className="py-2 pl-2 align-top">
+                    <div className="relative">
+                      <span aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-faint">₹</span>
+                      <input
+                        aria-label={`${b} target, next ${h} days, in rupees`}
+                        inputMode="numeric"
+                        value={draft[`${b}-${h}`] ?? ''}
+                        onChange={(e) => (setDraft((d) => ({ ...d, [`${b}-${h}`]: e.target.value.replace(/[^0-9]/g, '') })), setState('idle'))}
+                        className="field field-sm !pl-7"
+                      />
+                    </div>
+                    {draft[`${b}-${h}`] && <span className="mt-1 block text-xs text-faint">{money(Number(draft[`${b}-${h}`]))}</span>}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-    </div>
+      {saveError && <p role="alert" className="mt-3 text-sm text-loss">{saveError}</p>}
+      <div className="mt-5 flex items-center gap-3">
+        <Button onClick={save} busy={state === 'saving'} icon={TargetIcon}>Save targets</Button>
+        <span aria-live="polite" className="text-sm text-gain">{state === 'saved' ? '✓ Saved. Run the forecast to apply them.' : ''}</span>
+      </div>
+    </Card>
   )
 }
 
@@ -284,30 +321,38 @@ export default function DataPage() {
   const [tab, setTab] = useState<Tab>('upload')
   const first = !me?.workspace?.runs
   return (
-    <Stage
-      title={<>Bring in your <HighlightWord>pipeline</HighlightWord></>}
-      sub={
-        first
-          ? 'Upload a CSV export from your CRM, or explore with a sample company. Your first forecast runs as soon as the data lands.'
-          : "Upload this week's pipeline to see what changed. Re-uploads update deals and count date pushes for you."
-      }
-      controls={
-        <PillTabs
-          label="Data sections"
-          value={tab}
-          onChange={setTab}
-          options={[
-            { value: 'upload', label: 'Upload' },
-            { value: 'history', label: 'History' },
-            { value: 'targets', label: 'Targets' },
-          ]}
-        />
-      }
-      frameLabel="Data"
-    >
-      {tab === 'upload' && <Upload />}
-      {tab === 'history' && <History />}
-      {tab === 'targets' && <Targets />}
-    </Stage>
+    <>
+      <PageHeader
+        eyebrow={first ? 'Step 3 of 3' : undefined}
+        title="Bring in your pipeline"
+        sub={
+          first
+            ? 'Upload a CSV export from your CRM, or explore with a sample company. Your first forecast runs as soon as the data lands.'
+            : "Upload this week's pipeline to see what changed. Re-uploads update deals and count date pushes for you."
+        }
+        actions={
+          <Segmented
+            label="Data sections"
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: 'upload', label: 'Upload', icon: UploadIcon },
+              { value: 'history', label: 'History', icon: HistoryIcon },
+              { value: 'targets', label: 'Targets', icon: TargetIcon },
+            ]}
+          />
+        }
+      />
+      <div key={tab} className="page-enter">
+        {tab === 'upload' && <Upload />}
+        {tab === 'history' && (
+          <div className="space-y-6">
+            <PipelineChanges />
+            <History />
+          </div>
+        )}
+        {tab === 'targets' && <Targets />}
+      </div>
+    </>
   )
 }

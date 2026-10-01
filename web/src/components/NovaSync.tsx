@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link2 } from 'lucide-react'
 import { api, ApiError } from '../api/client'
 import { useApi } from '../lib'
-import { PillButton } from './ui'
+import { Button } from './ui'
 
 /** Pull quotations, clients, invoices and payments from Aczen Nova (read-only) and forecast them. */
 export function NovaSync({ onDone }: { onDone: () => Promise<void> }) {
@@ -35,12 +35,12 @@ export function NovaSync({ onDone }: { onDone: () => Promise<void> }) {
   }
 
   return (
-    <section aria-labelledby="nova" className="flex flex-col gap-4 rounded-card border border-forest/20 bg-lime/20 p-6 lg:flex-row lg:items-center lg:justify-between">
+    <section aria-labelledby="nova" className="card card-pad write-in flex flex-col gap-4 border-l-4 border-l-brand lg:flex-row lg:items-center lg:justify-between">
       <div className="max-w-[60ch]">
-        <h2 id="nova" className="flex items-center gap-2 font-head text-lg font-bold">
-          <Link2 aria-hidden size={18} /> Sync from Aczen Nova
+        <h2 id="nova" className="flex items-center gap-2 text-lg font-semibold tracking-tight">
+          <Link2 aria-hidden size={18} className="text-brand" /> Sync from Aczen Nova
         </h2>
-        <p className="mt-1 text-sm text-ink/80">
+        <p className="mt-1 text-sm text-muted">
           Reads your quotations as the pipeline, with clients, payment terms, invoices and payments for real close and cash dates.
           Read-only: nothing in Aczen changes. If this workspace holds the sample company, it is replaced.
         </p>
@@ -63,15 +63,15 @@ export function NovaSync({ onDone }: { onDone: () => Promise<void> }) {
               value={key}
               onChange={(e) => setKey(e.target.value)}
               placeholder="nova_sk_…"
-              className="w-full rounded-full border border-forest/20 bg-white px-4 py-2.5 text-sm sm:w-64"
+              className="field field-sm sm:!w-64"
             />
           </label>
         )}
-        <PillButton onClick={sync} busy={busy} disabled={!info || (!info.server_key && !key.trim())}>
+        <Button onClick={sync} arrow busy={busy} disabled={!info || (!info.server_key && !key.trim())}>
           {info?.server_key ? 'Sync now' : 'Connect and sync'}
-        </PillButton>
+        </Button>
       </div>
-      {info && !info.server_key && <p className="text-xs text-ink/60 lg:hidden">The key is used for this sync only and is not stored.</p>}
+      {info && !info.server_key && <p className="text-xs text-faint lg:hidden">The key is used for this sync only and is not stored.</p>}
     </section>
   )
 }

@@ -1,34 +1,38 @@
 import { useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { ArrowDownToLine, ArrowUpToLine, Banknote, BookOpenCheck, CircleDot, Target } from 'lucide-react'
 import { api } from '../api/client'
 import { money, pct, shortDate, useApi, useRun } from '../lib'
 import type { Basis, Forecast, Horizon } from '../types'
+import { PageHeader } from '../components/AppShell'
+import { FanLanding, ShareBars } from '../components/charts'
+import { PageSkeleton } from '../components/Loaders'
 import { RangeBand } from '../components/RangeBand'
-import { FanLanding } from '../components/charts'
-import { Stage } from '../components/Stage'
-import { PillTabs } from '../components/PillNav'
-import { ErrorNote, HighlightWord, PillButton, RingGauge, Skeleton, StatFloat } from '../components/ui'
+import { Button, Card, DeltaBadge, ErrorNote, RingGauge, Segmented, StatCard } from '../components/ui'
 
 const HORIZONS = [30, 60, 90].map((h) => ({ value: h as Horizon, label: `${h} days` }))
 const BASES = [
-  { value: 'bookings' as Basis, label: 'Bookings' },
-  { value: 'cash' as Basis, label: 'Cash' },
+  { value: 'bookings' as Basis, label: 'Bookings', icon: BookOpenCheck },
+  { value: 'cash' as Basis, label: 'Cash', icon: Banknote },
 ]
 
 /** Last run's range above this run's, on one scale: the move reads as a shift, not a number. */
 function RunCompare({ f }: { f: Forecast }) {
-  if (!f.prev) return null
+  if (!f.prev) return <p className="text-sm text-muted">This is the first run. The next one draws here, on the same scale as this one.</p>
   const domain: [number, number] = [Math.min(f.prev.p10, f.p10) * 0.9, Math.max(f.prev.p90, f.p90) * 1.05]
   return (
-    <dl className="mt-3 space-y-2 border-t border-hair pt-3 text-xs">
+    <dl className="space-y-4 text-sm">
       {[
         ['Last run', f.prev],
         ['This run', f],
       ].map(([name, r]) => {
         const v = r as { p10: number; p50: number; p90: number }
         return (
-          <div key={name as string} className="grid grid-cols-[52px_1fr] items-center gap-2">
-            <dt className="text-ink/70">{name as string}</dt>
+          <div key={name as string}>
+            <dt className="mb-2 flex justify-between text-xs text-muted">
+              <span>{name as string}</span>
+              <span className="font-medium text-ink">{money(v.p10)} – {money(v.p90)}</span>
+            </dt>
             <dd><RangeBand size="card" low={v.p10} mid={v.p50} high={v.p90} domain={domain} /></dd>
           </div>
         )
@@ -37,71 +41,36 @@ function RunCompare({ f }: { f: Forecast }) {
   )
 }
 
-/** Signed is not cash: what lands in the window as bookings but pays after it, plus invoices already late. */
-function CashRiskPanel({ f }: { f: Forecast }) {
+/** Booked revenue that lands after the window, and invoices already past their terms. */
+function CashRisk({ f }: { f: Forecast }) {
   const c = f.cash_risk
   if (!c) return null
   return (
-    <section aria-labelledby="cash-risk" className="mt-8 border-t border-hair pt-6">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 id="cash-risk" className="font-head text-lg font-bold">Revenue at risk of late collection</h2>
-        <p className="text-xs text-ink/70">Next {f.horizon} days · from each customer's payment terms and payment history</p>
-      </div>
-      <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr_1.4fr]">
+    <Card className="write-in" title="Revenue at risk of late collection" sub={`Next ${f.horizon} days · from each customer's payment terms and payment history`}>
+      <div className="grid gap-6 lg:grid-cols-[1fr_1fr_1.4fr]">
         <div>
-          <p className="text-xs text-ink/70">Booked in the window, paid after it</p>
-          <p className="mt-1 font-head text-xl font-bold">{money(c.booked_paid_later)}</p>
-          <p className="mt-1 text-xs text-ink/70">expected value</p>
+          <p className="text-xs text-muted">Booked in the window, paid after it</p>
+          <p className="mt-1 text-2xl font-semibold tracking-tight">{money(c.booked_paid_later)}</p>
+          <p className="mt-1 text-xs text-muted">expected value</p>
         </div>
         <div>
-          <p className="text-xs text-ink/70">Invoices already overdue</p>
-          <p className={`mt-1 font-head text-xl font-bold ${c.overdue_count ? 'text-loss' : ''}`}>{money(c.overdue_receivables)}</p>
-          <p className="mt-1 text-xs text-ink/70">{c.overdue_count} unpaid past their terms</p>
+          <p className="text-xs text-muted">Invoices already overdue</p>
+          <p className={`mt-1 text-2xl font-semibold tracking-tight ${c.overdue_count ? 'text-loss' : ''}`}>{money(c.overdue_receivables)}</p>
+          <p className="mt-1 text-xs text-muted">{c.overdue_count} unpaid past their terms</p>
         </div>
-        <ul className="divide-y divide-hair text-sm">
+        <ul className="divide-y divide-line text-sm">
           {c.top.slice(0, 4).map((t) => (
             <li key={t.name + t.kind} className="flex items-baseline justify-between gap-3 py-2">
               <span className="min-w-0">
                 <span className="block truncate font-medium">{t.name}</span>
-                <span className={`text-xs ${t.kind.includes('overdue') ? 'text-loss' : 'text-ink/70'}`}>{t.kind}</span>
+                <span className={`text-xs ${t.kind.includes('overdue') ? 'text-loss' : 'text-muted'}`}>{t.kind}</span>
               </span>
-              <span className="shrink-0">{money(t.amount)}</span>
+              <span className="shrink-0 font-medium">{money(t.amount)}</span>
             </li>
           ))}
         </ul>
       </div>
-    </section>
-  )
-}
-
-/** Where the expected revenue is concentrated: named deals, share bars from zero. */
-function TopDeals({ f }: { f: Forecast }) {
-  const deals = f.top_deals ?? []
-  if (!deals.length) return null
-  const max = Math.max(...deals.map((d) => d.share))
-  return (
-    <div>
-      <h2 className="text-lg">
-        Top 3 deals carry <strong className="font-head">{pct(f.top3_share)}</strong> of expected revenue
-      </h2>
-      {f.concentration?.largest && f.concentration.effective_deals && (
-        <p className="mt-1 text-sm text-white/90">
-          Spread like {Math.round(f.concentration.effective_deals)} equal-sized deals. If {f.concentration.largest.name} slips out of the window,
-          the expected figure falls {pct(f.concentration.largest.share)} ({money(f.concentration.largest.expected)}).
-        </p>
-      )}
-      <ul className="mt-4 space-y-2.5">
-        {deals.map((d) => (
-          <li key={d.name} className="grid grid-cols-[minmax(0,160px)_1fr_48px] items-center gap-3 text-sm">
-            <span className="truncate">{d.name}</span>
-            <span aria-hidden className="h-2 rounded-full bg-white/15">
-              <span className="block h-2 rounded-full bg-lime" style={{ width: `${(d.share / max) * 100}%` }} />
-            </span>
-            <span className="text-right">{pct(d.share, 1)}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
+    </Card>
   )
 }
 
@@ -110,78 +79,91 @@ export default function ForecastPage() {
   const [horizon, setHorizon] = useState<Horizon>(([30, 60, 90].includes(Number(params.get('horizon'))) ? Number(params.get('horizon')) : 30) as Horizon)
   const [basis, setBasis] = useState<Basis>(params.get('basis') === 'cash' ? 'cash' : 'bookings')
   const { runId } = useRun()
-  const { data: f, error } = useApi(() => api.forecast(horizon, basis), [horizon, basis, runId])
+  const { data: f, error, retry } = useApi(() => api.forecast(horizon, basis), [horizon, basis, runId])
   const gap = f ? f.p50 - f.target : 0
   const delta = f?.prev ? f.p50 / f.prev.p50 - 1 : undefined
 
   return (
-    <Stage
-      title={<>Your revenue, as a <HighlightWord>range</HighlightWord></>}
-      sub="Ten thousand simulated futures of your open pipeline, not one hopeful number."
-      controls={
-        <>
-          <PillTabs label="Horizon" options={HORIZONS} value={horizon} onChange={setHorizon} />
-          <PillTabs label="Basis" options={BASES} value={basis} onChange={setBasis} />
-        </>
-      }
-      frameLabel="Live forecast"
-      floats={
-        f && (
+    <>
+      <PageHeader
+        title="Your revenue, as a range"
+        sub="Ten thousand simulated futures of your open pipeline, not one hopeful number."
+        actions={
           <>
-            <StatFloat className="xl:absolute xl:-left-28 xl:top-36 xl:w-[220px]" label="Median outcome" value={money(f.p50)} delta={delta}>
-              <RunCompare f={f} />
-            </StatFloat>
-            <StatFloat
-              className="xl:absolute xl:-right-20 xl:top-16"
-              label="Chance of hitting target"
-              value={pct(f.prob_hit_target)}
-              note={`Target ${money(f.target)}`}
-              visual={<RingGauge value={f.prob_hit_target} label={`${pct(f.prob_hit_target)} chance of reaching ${money(f.target)}`} />}
-            />
+            <Segmented label="Horizon" options={HORIZONS} value={horizon} onChange={setHorizon} />
+            <Segmented label="Basis" options={BASES} value={basis} onChange={setBasis} />
           </>
-        )
-      }
-      after={
-        f && (
-          <div className="grid gap-8 border-t border-white/25 pt-8 lg:grid-cols-[1.4fr_1fr] lg:items-end">
-            <TopDeals f={f} />
-            <div className="flex flex-col gap-4 lg:items-end lg:text-right">
-              <p className="text-lg">
-                Gap to target at the median:{' '}
-                <strong className="font-head">{gap >= 0 ? '+' : '−'}{money(Math.abs(gap))}</strong>
-                {f.top_deal && <span className="block text-base text-white/90">Biggest risk: {f.top_deal}. Call them first.</span>}
-              </p>
-              <PillButton to="/app/risk" variant="secondary">See deals at risk</PillButton>
-            </div>
-          </div>
-        )
-      }
-    >
-      {error && <ErrorNote>Forecast did not load. {error}</ErrorNote>}
-      {!f && !error && <Skeleton label="Loading forecast" />}
+        }
+      />
+
+      {error && <ErrorNote retry={retry}>Forecast did not load. {error}</ErrorNote>}
+      {!f && !error && <PageSkeleton label="Loading forecast" variant="chart" />}
       {f && (
-        <>
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="font-head text-lg font-bold">
-              {f.horizon}-day {f.basis === 'cash' ? 'cash collected' : 'bookings'}
-            </h2>
-            <p className="text-xs text-ink/70">As of {shortDate(f.as_of)} · 10,000 simulated futures</p>
+        <div className="space-y-6">
+          <div className="stagger grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <StatCard i={0} label="Worst case · P10" icon={ArrowDownToLine} value={f.p10} format={money} foot="9 in 10 futures land above this" />
+            <StatCard i={1} label="Expected outcome · P50" icon={CircleDot} value={f.p50} format={money} foot={delta != null ? <><DeltaBadge value={delta} /> vs last run</> : 'First run'} />
+            <StatCard i={2} label="Best case · P90" icon={ArrowUpToLine} value={f.p90} format={money} foot="1 in 10 futures land above this" />
+            <StatCard
+              i={3}
+              label="Chance of hitting target"
+              icon={Target}
+              value={f.prob_hit_target}
+              format={(n) => pct(n)}
+              visual={<RingGauge value={f.prob_hit_target} label={`${pct(f.prob_hit_target)} chance of reaching ${money(f.target)}`} />}
+              foot={<>Target {money(f.target)}</>}
+            />
           </div>
-          <div className="mt-8 px-2 sm:px-6">
-            <RangeBand low={f.p10} mid={f.p50} high={f.p90} target={f.target} />
+
+          <Card
+            className="write-in"
+            title={`${f.horizon}-day ${f.basis === 'cash' ? 'cash collected' : 'bookings'}`}
+            sub={`As of ${shortDate(f.as_of)} · 10,000 simulated futures`}
+            action={
+              <ul className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted">
+                <li className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm bg-brand/40" /> Middle half</li>
+                <li className="flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm bg-brand/15" /> 8 in 10</li>
+                <li className="flex items-center gap-1.5"><span className="h-0 w-4 border-t-2 border-dashed border-target" /> Target</li>
+              </ul>
+            }
+          >
+            <div className="px-2 pt-2 sm:px-6">
+              <RangeBand low={f.p10} mid={f.p50} high={f.p90} target={f.target} />
+            </div>
+            <div className="mt-4 border-t border-line pt-5">
+              <FanLanding f={f} />
+            </div>
+          </Card>
+
+          <div className="grid gap-6 lg:grid-cols-3">
+            <Card className="write-in" title="Run over run" sub="Same horizon and basis, one scale">
+              <RunCompare f={f} />
+            </Card>
+            <Card className="write-in" title="Gap to target" sub="At the median outcome">
+              <p className={`font-head text-3xl font-bold ${gap >= 0 ? 'text-gain' : 'text-loss'}`}>
+                {gap >= 0 ? '+' : '−'}
+                {money(Math.abs(gap))}
+              </p>
+              <p className="mt-2 text-sm text-muted">
+                {gap >= 0 ? 'The median future clears the target.' : `The median future falls short of ${money(f.target)}.`}
+                {f.top_deal && <> Biggest single risk: <strong className="font-semibold text-ink">{f.top_deal}</strong>.</>}
+              </p>
+              <Button to="/app/risk" variant="secondary" arrow className="mt-5">See deals at risk</Button>
+            </Card>
+            <Card className="write-in" title="Where it is concentrated" sub={`Top 3 deals carry ${pct(f.top3_share)} of expected revenue`}>
+              {f.top_deals?.length ? <ShareBars items={f.top_deals} format={(n) => pct(n, 1)} /> : <p className="text-sm text-muted">No single deal dominates.</p>}
+              {f.concentration?.largest && f.concentration.effective_deals && (
+                <p className="mt-4 text-xs text-muted">
+                  Spread like {Math.round(f.concentration.effective_deals)} equal-sized deals. If {f.concentration.largest.name} slips out of the window,
+                  the expected figure falls {pct(f.concentration.largest.share)} ({money(f.concentration.largest.expected)}).
+                </p>
+              )}
+            </Card>
           </div>
-          <figure className="mt-8 border-t border-hair pt-6">
-            <figcaption className="mb-3 flex flex-wrap items-baseline justify-between gap-2 text-sm">
-              <span className="font-medium">How the range opens up, and where it lands</span>
-              <span className="text-xs text-ink/70">
-                Dark band: middle half of futures · light band: 8 in 10 · green: reach the target
-              </span>
-            </figcaption>
-            <FanLanding f={f} />
-          </figure>
-          <CashRiskPanel f={f} />
-        </>
+
+          <CashRisk f={f} />
+        </div>
       )}
-    </Stage>
+    </>
   )
 }

@@ -1,0 +1,72 @@
+/* 404 illustration: the fan draws itself, then the one outlier (this URL) pops up and drifts. */
+.nf-band {
+  fill: rgb(var(--brand) / 0.08);
+  transform-origin: 40px 150px;
+  animation: nf-open 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.nf-path {
+  fill: none;
+  stroke: rgb(var(--brand) / 0.45);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  animation: nf-draw 1100ms cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+.nf-mid {
+  fill: none;
+  stroke: rgb(var(--brand));
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  animation: nf-draw 1200ms cubic-bezier(0.65, 0, 0.35, 1) 500ms both;
+}
+.nf-edge {
+  stroke: rgb(var(--faint) / 0.5);
+  stroke-dasharray: 4 5;
+}
+.nf-origin {
+  fill: rgb(var(--brand));
+}
+.nf-label {
+  font: 600 12px 'Manrope Variable', Manrope, sans-serif;
+  fill: rgb(var(--faint));
+  letter-spacing: 0.05em;
+}
+.nf-leader {
+  stroke: rgb(var(--loss) / 0.6);
+  stroke-width: 1.5;
+  stroke-dasharray: 1;
+  animation: nf-draw 600ms ease-out 1500ms both;
+}
+.nf-dot {
+  fill: rgb(var(--loss));
+  transform-origin: 430px 36px;
+  animation: nf-pop 600ms cubic-bezier(0.34, 1.56, 0.64, 1) 1900ms both;
+}
+.nf-halo {
+  fill: rgb(var(--loss) / 0.18);
+  transform-origin: 430px 36px;
+  animation: nf-pop 600ms cubic-bezier(0.34, 1.56, 0.64, 1) 1950ms both, nf-pulse 2.4s ease-in-out 2.6s infinite;
+}
+.nf-outlier {
+  animation: nf-float 5s ease-in-out 2.6s infinite;
+}
+
+@keyframes nf-open {
+  from { transform: scaleY(0.05); opacity: 0; }
+}
+@keyframes nf-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+@keyframes nf-pop {
+  from { transform: scale(0); }
+}
+@keyframes nf-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.5); opacity: 0.4; }
+}
+@keyframes nf-float {
+  0%, 100% { transform: translate(0, 0); }
+  50% { transform: translate(-4px, 6px); }
+}

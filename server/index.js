@@ -344,20 +344,44 @@ app.get('/forecast', route(({ req, ws }) => forecast(ws.id, horizonOf(req.query.
 app.get('/forecast/changes', route(({ req, ws }) => changes(ws.id, req.query.run_id, horizonOf(req.query.horizon), basisOf(req.query.basis)), { empty: noRun }))
 app.get('/deals/risk', route(({ ws }) => risk(ws.id)))
 
-// One deal's timeline: every stage change and close-date push, oldest first.
+// Deal event log in the shape the screens read (DealEvent): built from stage_events, closedate_events and
+// deals.created_at. A move to Closed is reported as a status change (won/lost).
+const EVENTS_SQL = `
+  select deal_id, deal_name, at, kind, from_value, to_value, source, recorded_at from (
+    select d.id as deal_id, d.name as deal_name, d.created_at as at, 'created' as kind, null as from_value, d.stage as to_value,
+           'pipeline' as source, d.created_at as recorded_at, 0 as ord
+      from deals d where d.workspace_id = $1
+    union all
+    select e.deal_id, d.name, e.changed_at, case when e.to_stage = 'Closed' then 'status' else 'stage' end,
+           case when e.to_stage = 'Closed' then 'open' else e.from_stage end,
+           case when e.to_stage = 'Closed' then d.status else e.to_stage end, 'pipeline', e.changed_at, 1
+      from stage_events e join deals d on d.workspace_id = e.workspace_id and d.id = e.deal_id
+     where e.workspace_id = $1 and e.from_stage is not null
+    union all
+    select e.deal_id, d.name, e.changed_at, 'close_date', e.old_date::text, e.new_date::text, 'pipeline', e.changed_at, 2
+      from closedate_events e join deals d on d.workspace_id = e.workspace_id and d.id = e.deal_id
+     where e.workspace_id = $1
+  ) x`
+
 app.get('/deals/:id/history', route(async ({ req, ws }) => {
   const id = String(req.params.id).slice(0, 80)
-  const [deal] = await q('select id, name, stage, status, created_at, expected_close_date, push_count from deals where workspace_id = $1 and id = $2', [ws.id, id])
-  if (!deal) return undefined
-  const events = await q(
-    `select 'stage' as kind, changed_at, from_stage as before, to_stage as after from stage_events where workspace_id = $1 and deal_id = $2
-     union all
-     select 'close_date', changed_at, old_date::text, new_date::text from closedate_events where workspace_id = $1 and deal_id = $2
-     order by changed_at, kind desc`,
+  const [deal] = await q(
+    `select d.id, d.name, d.stage, d.status, d.value, d.created_at, d.expected_close_date, d.push_count,
+            coalesce((select max(changed_at) from stage_events e where e.workspace_id = d.workspace_id and e.deal_id = d.id and e.to_stage <> 'Closed'), d.created_at) as stage_entered_at,
+            c.name as account, c.segment, coalesce(c.payment_terms_days, 30) as payment_terms_days, p.name as rep, p.team
+       from deals d join customers c on c.workspace_id = d.workspace_id and c.id = d.customer_id
+       left join salespeople p on p.workspace_id = d.workspace_id and p.id = d.salesperson_id
+      where d.workspace_id = $1 and d.id = $2`,
     [ws.id, id],
   )
+  if (!deal) return undefined
+  const events = await q(`${EVENTS_SQL} where deal_id = $2 order by at, ord`, [ws.id, id])
   return { deal, events }
-}, { empty: 'That deal is not in this workspace.' }))
+}, { empty: 'No deal with that id in this workspace.' }))
+
+// Recent pipeline changes across the workspace, newest first (Data > History feed).
+app.get('/events', route(({ req, ws }) =>
+  q(`${EVENTS_SQL} where kind <> 'created' order by recorded_at desc, at desc, ord desc limit $2`, [ws.id, Math.min(Math.max(Number(req.query.limit) || 50, 1), 200)])))
 app.get('/metrics/accuracy', route(({ ws }) => accuracy(ws.id), { empty: 'No accuracy report yet. It is built with sample data, or after enough history is uploaded.' }))
 app.post('/run', route(({ ws }) => runForecast(ws.id)))
 

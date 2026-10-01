@@ -2,11 +2,38 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Rangefinder · Revenue forecasts as a range</title>
+    <meta name="description" content="Rangefinder simulates your sales pipeline 10,000 times and shows where revenue will really land for the next 30, 60 and 90 days, and exactly why it moved since last week." />
+
+    <!-- icons: SVG for modern browsers, ICO/PNG fallbacks, Apple touch icon, installable manifest -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Rangefinder</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="alternate icon" href="/favicon.ico" sizes="48x48" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content="#EFE3DA" />
+    <meta name="color-scheme" content="light dark" />
+
+    <!-- social previews -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Rangefinder · Revenue forecasts as a range" />
+    <meta property="og:description" content="See next quarter as a range, not a guess. 10,000 simulated futures of your pipeline, with every change explained." />
+    <meta property="og:image" content="/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- apply the saved theme before first paint, so dark mode never flashes light -->
+    <script>
+      try {
+        var p = localStorage.getItem('rf-theme')
+        var d = p === 'dark' || ((!p || p === 'system') && matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = d ? 'dark' : 'light'
+      } catch (e) {}
+    </script>
   </head>
   <body>
+    <noscript>Rangefinder needs JavaScript to run the forecast.</noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

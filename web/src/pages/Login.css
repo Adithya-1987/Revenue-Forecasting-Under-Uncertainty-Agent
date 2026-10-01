@@ -1,0 +1,48 @@
+/* Sliding auth track. Small screens: two panels (200%), slide by half. lg+: three panels (150%), slide by a third. */
+.auth-track {
+  transition: transform 800ms cubic-bezier(0.77, 0, 0.175, 1);
+  will-change: transform;
+}
+.auth-track.is-signup {
+  transform: translateX(-50%);
+}
+@media (min-width: 1024px) {
+  .auth-track.is-signup {
+    transform: translateX(-33.3333%);
+  }
+}
+
+/* the form leaving the viewport dims and settles back; the arriving one rises in, line by line */
+.auth-form {
+  opacity: 0.2;
+  transform: scale(0.96);
+  transition: opacity 500ms ease, transform 800ms cubic-bezier(0.77, 0, 0.175, 1);
+}
+.auth-form.is-active {
+  opacity: 1;
+  transform: none;
+}
+.auth-form.is-active .auth-stagger {
+  animation: auth-rise 620ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.auth-form.is-active .auth-stagger:nth-child(1) { animation-delay: 320ms; }
+.auth-form.is-active .auth-stagger:nth-child(2) { animation-delay: 400ms; }
+.auth-form.is-active .auth-stagger:nth-child(3) { animation-delay: 480ms; }
+.auth-form.is-active .auth-stagger:nth-child(4) { animation-delay: 540ms; }
+@keyframes auth-rise {
+  from { opacity: 0; transform: translateY(16px); }
+}
+
+.brand-swap {
+  animation: brand-swap 600ms cubic-bezier(0.22, 1, 0.36, 1) 250ms both;
+}
+@keyframes brand-swap {
+  from { opacity: 0; transform: translateY(8px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-track,
+  .auth-form {
+    transition-duration: 1ms;
+  }
+}
