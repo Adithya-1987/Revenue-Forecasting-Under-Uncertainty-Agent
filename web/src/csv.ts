@@ -23,7 +23,7 @@ export function parseCSV(text: string): string[][] {
 }
 
 export const REQUIRED = ['deal_id', 'deal_name', 'account', 'segment', 'rep', 'value', 'stage', 'status', 'created_at', 'expected_close_date', 'last_activity_date'] as const
-export const OPTIONAL = ['closed_at', 'paid_at', 'date_pushes'] as const
+export const OPTIONAL = ['closed_at', 'paid_at', 'date_pushes', 'stage_entered_at', 'team', 'payment_terms_days'] as const
 export type Column = (typeof REQUIRED)[number] | (typeof OPTIONAL)[number]
 
 // Common CRM export headings -> our columns. Anything else can be mapped by hand on the Data page.
@@ -33,6 +33,8 @@ const ALIASES: Record<string, Column> = {
   amount: 'value', deal_value: 'value', deal_stage: 'stage', created: 'created_at', create_date: 'created_at',
   close_date: 'expected_close_date', expected_close: 'expected_close_date', last_activity: 'last_activity_date',
   closed_date: 'closed_at', paid_date: 'paid_at', pushes: 'date_pushes',
+  stage_date: 'stage_entered_at', stage_since: 'stage_entered_at', sales_team: 'team', payment_terms: 'payment_terms_days',
+  terms: 'payment_terms_days', net_days: 'payment_terms_days',
 }
 
 const norm = (h: string) => h.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
@@ -55,10 +57,10 @@ export function applyMapping(headers: string[], rows: string[][], map: Partial<R
 
 const TEMPLATE = [
   [...REQUIRED, ...OPTIONAL].join(','),
-  'D-1001,Acme renewal,Acme Corp,Enterprise,Raj Sharma,500000,Proposal,open,2026-07-02,2026-10-20,2026-09-24,,,1',
-  'D-1002,Globex pilot,Globex,Mid-Market,Meera Iyer,300000,Demo,open,2026-08-11,2026-11-05,2026-09-28,,,0',
-  'D-0877,Initech expansion,Initech,SMB,Priya Nair,120000,Negotiation,won,2026-03-04,2026-05-01,2026-05-10,2026-05-18,2026-07-02,',
-  'D-0870,Hooli trial,Hooli,SMB,Arjun Rao,90000,Demo,lost,2026-02-10,2026-04-01,2026-03-20,2026-04-12,,',
+  'D-1001,Acme renewal,Acme Corp,Enterprise,Raj Sharma,500000,Proposal,open,2026-07-02,2026-10-20,2026-09-24,,,1,2026-08-24,South,60',
+  'D-1002,Globex pilot,Globex,Mid-Market,Meera Iyer,300000,Demo,open,2026-08-11,2026-11-05,2026-09-28,,,0,2026-08-29,North,45',
+  'D-0877,Initech expansion,Initech,SMB,Priya Nair,120000,Negotiation,won,2026-03-04,2026-05-01,2026-05-10,2026-05-18,2026-07-02,,2026-04-20,North,30',
+  'D-0870,Hooli trial,Hooli,SMB,Arjun Rao,90000,Demo,lost,2026-02-10,2026-04-01,2026-03-20,2026-04-12,,,2026-03-01,North,30',
 ].join('\n')
 
 export function downloadTemplate() {

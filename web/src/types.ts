@@ -70,3 +70,35 @@ export interface Accuracy {
   history: { run_at: string; predicted: number; actual: number; p10: number; p90: number }[]
   reps: { id: string; name: string; committed: number; actual: number; score: number; label: 'optimist' | 'sandbagger' | 'calibrated' }[]
 }
+
+/** One logged change to a deal (deal_events). Values are text: a stage, an ISO date, an amount or a status. */
+export interface DealEvent {
+  deal_id: string
+  deal_name: string
+  at: string
+  kind: 'created' | 'stage' | 'close_date' | 'value' | 'status'
+  from_value: string | null
+  to_value: string | null
+  source: string
+  recorded_at: string
+}
+
+export interface DealHistory {
+  deal: {
+    id: string
+    name: string
+    stage: string
+    status: 'open' | 'won' | 'lost'
+    value: number
+    created_at: string
+    stage_entered_at: string
+    expected_close_date: string
+    push_count: number
+    account: string
+    segment: RiskDeal['segment']
+    payment_terms_days: number
+    rep: string
+    team: string | null
+  }
+  events: DealEvent[]
+}

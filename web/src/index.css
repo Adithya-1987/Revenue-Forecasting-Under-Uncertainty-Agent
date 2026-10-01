@@ -2,99 +2,358 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Rangefinder palette — ember on frosted glass.
+ * A warm peach-to-stone backdrop; the app floats on it in a frosted frame, and every module is a
+ * translucent glass card with a white edge, so panels separate by light rather than by heavy borders.
+ * One feature panel per screen is "night" (near-black with an ember glow) to pull the eye.
+ * Ember orange is the accent for data and active states; primary actions are ink pills. Ranges use
+ * peach -> ember -> rose. Text pairs clear WCAG AA on the glass they sit on.
+ */
 :root {
-  --lime: 217 247 154; /* #d9f79a */
-  --forest: 30 45 38; /* #1e2d26 */
-  --sage: 98 120 90; /* #62785a */
-  --ink: 22 32 30; /* #16201e */
-  --gain: 63 125 58; /* #3f7d3a */
-  --loss: 181 69 47; /* #b5452f */
-  --target: 192 138 46; /* #c08a2e */ /* target marker only */
-  --hair: 223 229 220; /* #dfe5dc */
+  color-scheme: light;
+  --canvas: 236 230 225;      /* #ECE6E1 solid fallback behind the backdrop */
+  --rail: 232 223 216;        /* #E8DFD8 landing bands, deeper glass */
+  --surface: 252 250 248;     /* #FCFAF8 popovers, fields, solid cards */
+  --surface-2: 243 238 234;   /* #F3EEEA wells, hovers, table heads */
+  --line: 228 220 213;        /* #E4DCD5 hairlines */
+  --ink: 28 25 23;            /* #1C1917 primary text */
+  --muted: 87 80 74;          /* #57504A secondary text */
+  --faint: 110 102 95;        /* #6E665F tertiary text */
+  --brand: 181 78 22;         /* #B54E16 ember: text, focus, active */
+  --brand-soft: 251 228 212;  /* #FBE4D4 selected fills */
+  --on-brand: 255 255 255;
+  --accent: 240 146 88;       /* #F09258 ember on night */
+  --navy: 28 24 22;           /* #1C1816 night panels */
+  --navy-2: 44 37 33;         /* #2C2521 */
+  --gain: 21 128 61;          /* #15803D */
+  --loss: 185 28 28;          /* #B91C1C */
+  --target: 126 58 110;       /* #7E3A6E plum: the target line, distinct from ember */
+  --info: 105 86 207;         /* #6956CF */
+  --mint: 246 195 155;        /* #F6C39B range, best (peach) */
+  --sky: 236 146 86;          /* #EC9256 range, expected (ember) */
+  --lavender: 201 138 155;    /* #C98A9B range, worst (rose) */
+  --shadow: 120 72 40;        /* warm shadow */
+  --glass: 255 255 255;
+  --glass-a: 0.5;
+  --glass-edge: 255 255 255;
+  --glass-edge-a: 0.75;
+  --frame-a: 0.26;
+  --backdrop: radial-gradient(1100px 760px at -5% -10%, #f7c9a8 0%, rgb(247 201 168 / 0) 62%),
+    radial-gradient(900px 700px at 105% 110%, #ead3c6 0%, rgb(234 211 198 / 0) 60%),
+    linear-gradient(135deg, #efe3da 0%, #e3dcd7 55%, #d8d5d3 100%);
 }
 
-body {
-  @apply bg-sage font-sans text-base text-ink antialiased;
-  font-variant-numeric: tabular-nums;
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --canvas: 22 19 17;         /* #161311 */
+  --rail: 30 26 23;           /* #1E1A17 */
+  --surface: 38 33 30;        /* #26211E popovers, fields */
+  --surface-2: 48 42 38;      /* #302A26 wells, hovers */
+  --line: 66 58 52;           /* #423A34 */
+  --ink: 243 237 232;         /* #F3EDE8 */
+  --muted: 194 183 174;       /* #C2B7AE */
+  --faint: 158 147 138;       /* #9E938A */
+  --brand: 242 151 94;        /* #F2975E */
+  --brand-soft: 72 43 27;     /* #482B1B */
+  --on-brand: 24 16 11;
+  --accent: 242 151 94;
+  --navy: 12 10 9;            /* #0C0A09 night panels, darker than the glass */
+  --navy-2: 30 25 22;
+  --gain: 92 200 140;
+  --loss: 245 124 112;
+  --target: 214 142 196;      /* #D68EC4 */
+  --info: 164 150 240;
+  --mint: 250 205 168;
+  --sky: 240 150 92;
+  --lavender: 212 150 168;
+  --shadow: 0 0 0;
+  --glass: 255 255 255;
+  --glass-a: 0.055;
+  --glass-edge: 255 255 255;
+  --glass-edge-a: 0.09;
+  --frame-a: 0.025;
+  --backdrop: radial-gradient(1000px 720px at -5% -10%, #4a2716 0%, rgb(74 39 22 / 0) 60%),
+    radial-gradient(900px 700px at 105% 110%, #2c1f1a 0%, rgb(44 31 26 / 0) 60%),
+    linear-gradient(135deg, #1b1613 0%, #141110 60%, #100e0d 100%);
 }
 
-:focus-visible {
-  outline: 2px solid rgb(var(--forest));
-  outline-offset: 2px;
-}
-.bg-forest :focus-visible,
-.on-dark :focus-visible {
-  outline-color: rgb(var(--lime));
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-canvas font-sans text-base text-ink antialiased;
+    background-image: var(--backdrop);
+    background-attachment: fixed;
+    font-variant-numeric: tabular-nums;
+  }
+  h1, h2, h3 {
+    @apply font-head tracking-tight;
+    text-wrap: balance;
+  }
+  :focus-visible {
+    outline: 2px solid rgb(var(--brand));
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  .on-navy :focus-visible {
+    outline-color: rgb(var(--accent));
+  }
+  ::selection {
+    background: rgb(var(--brand) / 0.18);
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--line)) transparent;
+  }
 }
 
-/* The one orchestrated moment: band slides, then ledger rows write in */
+@layer components {
+  /* ---------- buttons ---------- */
+  .btn {
+    @apply relative inline-flex select-none items-center justify-center gap-2 whitespace-nowrap rounded-lg px-3.5 font-medium;
+    height: 38px;
+    font-size: 14px;
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, box-shadow 150ms ease, transform 120ms ease;
+    touch-action: manipulation;
+  }
+  .btn:active:not(:disabled) {
+    transform: translateY(1px);
+  }
+  .btn:disabled {
+    @apply cursor-not-allowed opacity-60;
+  }
+  /* primary: an ink pill (the night of the feature card); in dark mode it turns ember */
+  .btn-primary {
+    @apply rounded-full text-white;
+    background: linear-gradient(180deg, #2e2724, #1a1614);
+    box-shadow: 0 1px 2px rgb(var(--shadow) / 0.2), 0 6px 14px -6px rgb(var(--shadow) / 0.45), inset 0 1px 0 rgb(255 255 255 / 0.12);
+  }
+  :root[data-theme='dark'] .btn-primary {
+    @apply text-on-brand;
+    background: linear-gradient(180deg, #f6a16b, #e9854a);
+    box-shadow: 0 6px 16px -6px rgb(240 146 88 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.3);
+  }
+  .btn-primary:hover:not(:disabled) {
+    filter: brightness(1.12);
+  }
+  .btn-secondary {
+    @apply rounded-full text-ink;
+    background: rgb(var(--glass) / calc(var(--glass-a) + 0.25));
+    border: 1px solid rgb(var(--glass-edge) / var(--glass-edge-a));
+    box-shadow: 0 1px 2px rgb(var(--shadow) / 0.06), 0 4px 12px -6px rgb(var(--shadow) / 0.2);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: rgb(var(--glass) / calc(var(--glass-a) + 0.4));
+  }
+  .btn-ghost {
+    @apply rounded-full text-muted;
+  }
+  .btn-ghost:hover:not(:disabled) {
+    @apply text-ink;
+    background: rgb(var(--glass) / calc(var(--glass-a) + 0.2));
+  }
+  .btn-onnavy {
+    @apply border border-white/20 bg-white/5 text-white;
+  }
+  .btn-onnavy:hover:not(:disabled) {
+    @apply bg-white/10;
+  }
+  .btn-lg {
+    height: 44px;
+    @apply px-5 text-md;
+  }
+  .btn-sm {
+    height: 32px;
+    @apply px-2.5 text-sm;
+  }
+
+  /* ---------- surfaces ---------- */
+  /* frosted glass: translucent fill, white edge, soft warm shadow */
+  .glass {
+    background: rgb(var(--glass) / var(--glass-a));
+    border: 1px solid rgb(var(--glass-edge) / var(--glass-edge-a));
+    -webkit-backdrop-filter: blur(22px) saturate(140%);
+    backdrop-filter: blur(22px) saturate(140%);
+  }
+  .card {
+    @apply glass rounded-card shadow-card;
+  }
+  /* the app frame: fainter glass than the cards it holds, so modules read as raised panes */
+  .frame {
+    background: rgb(var(--glass) / var(--frame-a));
+    border: 1px solid rgb(var(--glass-edge) / var(--glass-edge-a));
+    -webkit-backdrop-filter: blur(30px) saturate(130%);
+    backdrop-filter: blur(30px) saturate(130%);
+  }
+  /* the one dark feature panel: night with an ember glow and faint rings */
+  .night {
+    @apply relative isolate overflow-hidden rounded-card text-white;
+    background: radial-gradient(420px 260px at 18% 0%, rgb(232 128 64 / 0.55), rgb(232 128 64 / 0) 70%),
+      radial-gradient(300px 300px at 100% 30%, rgb(255 255 255 / 0.06), transparent 70%),
+      linear-gradient(160deg, #2a2420 0%, #171311 55%, #0f0c0b 100%);
+    box-shadow: 0 24px 48px -24px rgb(28 18 12 / 0.6), inset 0 1px 0 rgb(255 255 255 / 0.08);
+  }
+  .night::after {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    width: 340px;
+    height: 340px;
+    right: -120px;
+    top: -60px;
+    border-radius: 9999px;
+    border: 28px solid rgb(255 255 255 / 0.035);
+    box-shadow: 0 0 0 46px rgb(255 255 255 / 0.02);
+  }
+  /* rounded bar fills: peach -> ember -> rose, like the range */
+  .ember-fill {
+    background: linear-gradient(180deg, rgb(var(--mint)), rgb(var(--sky)) 45%, rgb(var(--lavender)));
+  }
+  .ember-fill-x {
+    background: linear-gradient(90deg, rgb(var(--lavender)), rgb(var(--sky)) 60%, rgb(var(--mint)));
+  }
+  .card-pad {
+    @apply p-5 sm:p-6;
+  }
+  .well {
+    @apply rounded-lg bg-surface-2;
+  }
+
+  /* ---------- form ---------- */
+  .field {
+    @apply w-full rounded-xl border border-line bg-surface/80 px-3.5 text-md text-ink outline-none placeholder:text-faint;
+    height: 44px;
+    box-shadow: 0 1px 2px rgb(var(--shadow) / 0.05);
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+  }
+  .field:focus {
+    @apply border-brand;
+    box-shadow: 0 0 0 3px rgb(var(--brand) / 0.16);
+  }
+  .field[aria-invalid='true'] {
+    @apply border-loss;
+  }
+  .field-sm {
+    height: 36px;
+    @apply px-3 text-sm;
+  }
+  .label {
+    @apply mb-1.5 block text-sm font-medium text-ink;
+  }
+
+  /* ---------- chips ---------- */
+  .chip {
+    @apply inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+  .chip-neutral {
+    @apply text-muted ring-1 ring-inset;
+    background: rgb(var(--glass) / calc(var(--glass-a) + 0.15));
+    --tw-ring-color: rgb(var(--glass-edge) / var(--glass-edge-a));
+  }
+  .chip-brand {
+    @apply bg-brand-soft text-brand;
+  }
+  .chip-loss {
+    @apply bg-loss/10 text-loss;
+  }
+  .chip-gain {
+    @apply bg-gain/10 text-gain;
+  }
+
+  .eyebrow {
+    @apply text-xs font-semibold uppercase tracking-[0.12em] text-brand;
+  }
+  .link {
+    @apply font-medium text-brand underline decoration-brand/30 underline-offset-4 transition-colors hover:decoration-brand;
+  }
+}
+
+/* ---------- motion: short, purposeful, never decorative loops ---------- */
+
+.page-enter {
+  animation: page-enter 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(6px); }
+}
+
+.stagger > * {
+  animation: rise 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(var(--i, 0) * 50ms);
+}
+@keyframes rise {
+  from { opacity: 0; transform: translateY(8px); }
+}
+
+.reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 600ms cubic-bezier(0.22, 1, 0.36, 1), transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: var(--d, 0ms);
+}
+.reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+
 .band-move {
-  transition: left 600ms cubic-bezier(0.2, 0.7, 0.2, 1), width 600ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  transition: left 700ms cubic-bezier(0.22, 1, 0.36, 1), width 700ms cubic-bezier(0.22, 1, 0.36, 1),
+    stroke-dasharray 900ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 .write-in {
-  animation: write-in 260ms ease-out both;
+  animation: write-in 280ms ease-out both;
 }
 @keyframes write-in {
-  from { opacity: 0; transform: translateY(4px); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .band-move { transition: none; }
-  .write-in { animation: none; }
+  from { opacity: 0; transform: translateY(3px); }
 }
 
-/* Lifting pill (after Gumroad, via Uiverse): lifts up-left and drops a hard shadow on hover. */
-.btn-lift {
-  --bg: rgb(var(--forest));
-  --fg: #fff;
-  --hover-bg: #fff;
-  --hover-text: rgb(var(--forest));
-  --edge: rgb(var(--forest));
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--fg);
-  cursor: pointer;
-  border: 1px solid var(--edge);
-  border-radius: 24px;
-  padding: 0.8em 2em;
-  background: var(--bg);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1;
-  white-space: nowrap;
-  transition: 0.2s;
+@keyframes grow {
+  from { transform: scaleX(0); }
 }
-.btn-lift--light {
-  --bg: #fff;
-  --fg: rgb(var(--forest));
-  --hover-bg: rgb(var(--forest));
-  --hover-text: #fff;
-}
-.btn-lift:hover:not(:disabled) {
-  color: var(--hover-text);
-  transform: translate(-0.25rem, -0.25rem);
-  background: var(--hover-bg);
-  box-shadow: 0.25rem 0.25rem 5px var(--edge);
-}
-.btn-lift:active:not(:disabled) {
-  transform: translate(0);
-  box-shadow: none;
-}
-.btn-lift:disabled {
-  cursor: progress;
-  opacity: 0.85;
-}
-@media (prefers-reduced-motion: reduce) {
-  .btn-lift:hover:not(:disabled) { transform: none; }
+@keyframes capsule {
+  from { transform: scaleY(0); }
 }
 
-::selection {
-  background: rgb(var(--forest));
-  color: rgb(var(--lime));
+/* skeletons */
+.shimmer {
+  position: relative;
+  overflow: hidden;
+  background: rgb(var(--ink) / 0.06);
+  border-radius: 10px;
 }
-/* on dark or sage grounds the light pill hovers to lime so it never vanishes */
-.on-dark .btn-lift--light {
-  --hover-bg: rgb(var(--lime));
-  --hover-text: rgb(var(--forest));
-  --edge: rgb(var(--ink));
+.shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(var(--glass) / 0.45), transparent);
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+@keyframes shimmer {
+  to { transform: translateX(100%); }
+}
+
+/* faint engineering grid, used behind hero diagrams only */
+.grid-lines {
+  background-image: linear-gradient(rgb(var(--line) / 0.8) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(var(--line) / 0.8) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+  .reveal {
+    opacity: 1;
+    transform: none;
+  }
 }

@@ -10,7 +10,8 @@ import { upsert, validate } from './imports.js'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const PORT = Number(process.env.PORT ?? 8787)
-const PYTHON = path.join(ROOT, 'engine/.venv/bin/python')
+// venvs put the interpreter in Scripts\ on Windows and bin/ elsewhere; PYTHON overrides both
+const PYTHON = process.env.PYTHON ?? path.join(ROOT, process.platform === 'win32' ? 'engine/.venv/Scripts/python.exe' : 'engine/.venv/bin/python')
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL
 const ANON = process.env.VITE_SUPABASE_ANON_KEY
 
@@ -148,6 +149,32 @@ async function risk(ws) {
   )
 }
 
+// Stage moves, close-date changes, value and status changes, as logged by the database (migration 0005).
+const EVENT_COLS = `e.deal_id, d.name as deal_name, e.at, e.kind, e.from_value, e.to_value, e.source, e.recorded_at`
+const EVENT_JOIN = `from deal_events e join deals d on d.workspace_id = e.workspace_id and d.id = e.deal_id`
+
+async function dealHistory(ws, id) {
+  const [deal] = await q(
+    `select d.id, d.name, d.stage, d.status, d.value, d.created_at, d.stage_entered_at, d.expected_close_date, d.push_count,
+            c.name as account, c.segment, c.payment_terms_days, p.name as rep, p.team
+       from deals d join customers c on c.workspace_id = d.workspace_id and c.id = d.customer_id
+                    join salespeople p on p.workspace_id = d.workspace_id and p.id = d.salesperson_id
+      where d.workspace_id = $1 and d.id = $2`,
+    [ws, id],
+  )
+  if (!deal) return undefined
+  const events = await q(`select ${EVENT_COLS} ${EVENT_JOIN} where e.workspace_id = $1 and e.deal_id = $2 order by e.at, e.id`, [ws, id])
+  return { deal, events }
+}
+
+// Latest changes first; 'created' rows are left out so one big import does not bury the moves.
+const recentEvents = (ws, limit) =>
+  q(
+    `select ${EVENT_COLS} ${EVENT_JOIN}
+      where e.workspace_id = $1 and e.kind <> 'created' order by e.recorded_at desc, e.at desc, e.id desc limit $2`,
+    [ws, limit],
+  )
+
 const accuracy = async (ws) =>
   (await q('select report from accuracy_reports where workspace_id = $1 order by computed_at desc limit 1', [ws]))[0]?.report
 
@@ -252,6 +279,8 @@ const noRun = 'No forecast yet. Upload your pipeline or load sample data on the 
 app.get('/forecast', route(({ req, ws }) => forecast(ws.id, horizonOf(req.query.horizon), basisOf(req.query.basis)), { empty: noRun }))
 app.get('/forecast/changes', route(({ req, ws }) => changes(ws.id, req.query.run_id, horizonOf(req.query.horizon), basisOf(req.query.basis)), { empty: noRun }))
 app.get('/deals/risk', route(({ ws }) => risk(ws.id)))
+app.get('/deals/:id/history', route(({ req, ws }) => dealHistory(ws.id, String(req.params.id).slice(0, 80)), { empty: 'No deal with that id in this workspace.' }))
+app.get('/events', route(({ req, ws }) => recentEvents(ws.id, Math.min(Math.max(Number(req.query.limit) || 50, 1), 200))))
 app.get('/metrics/accuracy', route(({ ws }) => accuracy(ws.id), { empty: 'No accuracy report yet. It is built with sample data, or after enough history is uploaded.' }))
 app.post('/run', route(({ ws }) => runForecast(ws.id)))
 

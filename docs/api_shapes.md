@@ -9,6 +9,8 @@ Types live in `web/src/types.ts`. Money is in rupees (number), probabilities 0..
 | `GET /deals/risk` | `RiskDeal[]` |
 | `GET /metrics/accuracy` | `Accuracy` |
 | `POST /run` | `{ run_id }` |
+| `GET /events?limit=50` | `DealEvent[]` (latest changes first, creations left out) |
+| `GET /deals/:id/history` | `DealHistory` |
 
 ```ts
 Forecast { as_of, horizon, basis, p10, p50, p90, target, prob_hit_target, top3_share, hhi,
@@ -26,4 +28,9 @@ RiskDeal { deal_id, name, value, p_win, p_win_low, p_win_high, expected_damage, 
 Accuracy { mape: { 30, 60, 90 }, bias, coverage, baseline_mape,
   history: [{ run_at, predicted, actual, p10, p90 }],
   reps: [{ id, name, committed, actual, score, label: optimist|sandbagger|calibrated }] }
+
+DealEvent { deal_id, deal_name, at, kind: created|stage|close_date|value|status, from_value?, to_value?, source, recorded_at }
+// Logged by database triggers on deals (migration 0005): every writer is captured the same way.
+DealHistory { deal: { id, name, stage, status, value, created_at, stage_entered_at, expected_close_date, push_count,
+  account, segment, payment_terms_days, rep, team }, events: DealEvent[] }
 ```

@@ -25,3 +25,20 @@ test('names the row and the fix', () => {
 })
 
 test('empty file', () => assert.deepEqual(validate([]).errors, ['The file has no data rows.']))
+
+test('optional history columns: team, payment terms, stage clock', () => {
+  const { deals, errors } = validate([row({ team: 'North', payment_terms_days: '45', stage_entered_at: '2026-09-01' }), row({ deal_id: 'D2' })])
+  assert.deepEqual(errors, [])
+  assert.equal(deals[0].team, 'North')
+  assert.equal(deals[0].terms, 45)
+  assert.equal(deals[0].stage_entered_at, '2026-09-01')
+  assert.equal(deals[1].team, null)
+  assert.equal(deals[1].terms, null)
+  assert.equal(deals[1].stage_entered_at, null)
+})
+
+test('rejects bad terms and a stage entered before the deal existed', () => {
+  const { errors } = validate([row({ payment_terms_days: '30.5' }), row({ deal_id: 'D2', stage_entered_at: '2026-07-01' })])
+  assert.match(errors[0], /^Row 2: payment_terms_days must be a whole number/)
+  assert.match(errors[1], /^Row 3: stage_entered_at cannot be before created_at/)
+})

@@ -12,6 +12,7 @@ from psycopg.types.json import Jsonb
 from engine.attribution import attribute, expected_total
 from engine.db import connect
 from engine.models import get_deal_inputs
+from engine.season import Season
 from engine.sim import BASES, HORIZONS, simulate
 
 SNAP_COLS = ["deal_id", "name", "value", "stage", "segment", "salesperson_id", "p_win", "p_win_low", "p_win_high",
@@ -40,23 +41,26 @@ def load_snapshot(cur, run_id) -> list[dict]:
 
 def main(as_of: date, ws: str) -> str:
     with connect() as conn, conn.cursor() as cur:
-        inputs, recv, _ = get_deal_inputs(conn, ws, as_of)
+        inputs, recv, model = get_deal_inputs(conn, ws, as_of)
+        season = model["season"]
         if not inputs:
             raise SystemExit("No open deals to forecast. Upload a CSV with open deals, or use sample data.")
         snap = [to_snapshot(d) for d in inputs]
 
         cur.execute("select horizon_days, basis, amount from targets where workspace_id = %s", (ws,))
         targets = {(h, b): float(a) for h, b, a in cur.fetchall()}
-        results = simulate(inputs, as_of, targets, recv)
+        results = simulate(inputs, as_of, targets, recv, season=season)
         if not targets:  # first run ever sets targets 10% above the median, rounded to 50k
             for (h, b), r in results.items():
                 targets[(h, b)] = round(r["p50"] * 1.1 / 50_000) * 50_000
                 cur.execute("insert into targets (workspace_id, horizon_days, basis, amount) values (%s, %s, %s, %s)", (ws, h, b, targets[(h, b)]))
-            results = simulate(inputs, as_of, targets, recv)
+            results = simulate(inputs, as_of, targets, recv, season=season)
 
-        cur.execute("select id, as_of from forecast_runs where workspace_id = %s order by run_at desc limit 1", (ws,))
+        cur.execute("select id, as_of, season from forecast_runs where workspace_id = %s order by run_at desc limit 1", (ws,))
         prev = cur.fetchone()
-        cur.execute("insert into forecast_runs (workspace_id, as_of) values (%s, %s) returning id", (ws, as_of))
+        # the run keeps its seasonal clock: explaining the next run replays this one on it (null = calendar)
+        cur.execute("insert into forecast_runs (workspace_id, as_of, season) values (%s, %s, %s) returning id",
+                    (ws, as_of, None if season.flat else Jsonb(season.index)))
         run_id = cur.fetchone()[0]
 
         for (h, b), r in results.items():
@@ -64,7 +68,7 @@ def main(as_of: date, ws: str) -> str:
                 "insert into forecast_results (run_id, horizon_days, basis, p10, p50, p90, mean, expected, target, "
                 "prob_hit_target, top3_share, hhi, top_deal, series, histogram, top_deals) "
                 "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
-                (run_id, h, b, r["p10"], r["p50"], r["p90"], r["mean"], round(expected_total(snap, as_of, h, b)),
+                (run_id, h, b, r["p10"], r["p50"], r["p90"], r["mean"], round(expected_total(snap, as_of, h, b, season)),
                  r["target"], r["prob_hit_target"], r["top3_share"], r["hhi"], r["top_deal"],
                  Jsonb(r["series"]), Jsonb(r["histogram"]), Jsonb(r["top_deals"])),
             )
@@ -73,7 +77,7 @@ def main(as_of: date, ws: str) -> str:
                 cp.write_row([run_id] + [json.dumps(s[c]) if c in ("factors", "reasons") else s[c] for c in SNAP_COLS])
 
         if prev:
-            prev_id, prev_as_of = prev
+            prev_id, prev_as_of, prev_index = prev
             prev_snap = load_snapshot(cur, prev_id)
             gone = [s["deal_id"] for s in prev_snap if s["deal_id"] not in {x["deal_id"] for x in snap}]
             cur.execute("select id, status from deals where workspace_id = %s and id = any(%s)", (ws, gone))
@@ -82,7 +86,7 @@ def main(as_of: date, ws: str) -> str:
             reps = dict(cur.fetchall())
             for h in HORIZONS:
                 for b in BASES:
-                    a = attribute(prev_snap, prev_as_of, snap, as_of, h, b, status, reps)
+                    a = attribute(prev_snap, prev_as_of, snap, as_of, h, b, status, reps, Season(prev_index), season)
                     rows = a["causes"] + [dict(cause_type="interaction_residual", deal_id=None, deal_name=None,
                                                amount=a["residual"], description="What the fixed order could not assign")]
                     cur.executemany(

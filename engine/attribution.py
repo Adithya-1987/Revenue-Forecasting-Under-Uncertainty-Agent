@@ -1,12 +1,14 @@
 """Explain the change between two snapshots with a staged walk in a fixed cause order.
 
 Works on the exact expected value (sim.expected_by_deal), so every step is additive per deal
-and the causes plus the residual sum to the total change to the rupee.
+and the causes plus the residual sum to the total change to the rupee. Each run is valued on its own
+seasonal clock; the walk swaps clocks in the window-shift step, together with the date.
 """
 import math
 from datetime import date
 
 
+from engine.season import Season
 from engine.sim import expected_by_deal
 
 CAUSE_ORDER = ["closed_won", "closed_lost", "new_deal", "value_change", "stage_move",
@@ -19,25 +21,30 @@ def _logit(p: float) -> float:
     return math.log(p / (1 - p))
 
 
-def _state(s: dict, as_of: date) -> dict:
+def _rem(s: dict, as_of: date, season: Season) -> float:
+    """Business days from as_of to the deal's planned close, at least 7."""
+    return max(season.between(as_of, s["expected_close_date"]), 7)
+
+
+def _state(s: dict, as_of: date, season: Season) -> dict:
     """Walkable deal state. cycle offset is stored relative to the run's as_of."""
-    rem = max((s["expected_close_date"] - as_of).days, 7)
-    return dict(s, L=_logit(s["p_win"]), offset=s["cycle_mu"] - math.log(rem))
+    return dict(s, L=_logit(s["p_win"]), offset=s["cycle_mu"] - math.log(_rem(s, as_of, season)))
 
 
-def _values(states: dict, as_of: date, horizon: int, basis: str) -> dict:
+def _values(states: dict, as_of: date, horizon: int, basis: str, season: Season) -> dict:
     ids = list(states)
     deals = []
     for i in ids:
         s = states[i]
-        rem = max((s["expected_close_date"] - as_of).days, 7)
-        deals.append(dict(value=s["value"], p_win=1 / (1 + math.exp(-s["L"])), cycle_mu=math.log(rem) + s["offset"],
-                          cycle_sigma=s["cycle_sigma"], payment_delay_mu=math.log(max(s["payment_delay_days"], 1))))
-    return dict(zip(ids, expected_by_deal(deals, horizon, basis))) if deals else {}
+        deals.append(dict(value=s["value"], p_win=1 / (1 + math.exp(-s["L"])),
+                          cycle_mu=math.log(_rem(s, as_of, season)) + s["offset"], cycle_sigma=s["cycle_sigma"],
+                          payment_delay_mu=math.log(max(s["payment_delay_days"], 1))))
+    return dict(zip(ids, expected_by_deal(deals, horizon, basis, as_of, season))) if deals else {}
 
 
-def expected_total(snapshot: list[dict], as_of: date, horizon: int, basis: str) -> float:
-    return float(sum(_values({s["deal_id"]: _state(s, as_of) for s in snapshot}, as_of, horizon, basis).values()))
+def expected_total(snapshot: list[dict], as_of: date, horizon: int, basis: str, season: Season | None = None) -> float:
+    season = season or Season()
+    return float(sum(_values({s["deal_id"]: _state(s, as_of, season) for s in snapshot}, as_of, horizon, basis, season).values()))
 
 
 def _money(n: float) -> str:
@@ -45,13 +52,15 @@ def _money(n: float) -> str:
 
 
 def attribute(prev: list[dict], prev_as_of: date, curr: list[dict], curr_as_of: date,
-              horizon: int, basis: str, status: dict[str, str], rep_names: dict[str, str]) -> dict:
-    """status: deal_id -> current status for deals that left the open pipeline."""
+              horizon: int, basis: str, status: dict[str, str], rep_names: dict[str, str],
+              prev_season: Season | None = None, curr_season: Season | None = None) -> dict:
+    """status: deal_id -> current status for deals that left the open pipeline. Seasons default to the calendar."""
+    prev_season, curr_season = prev_season or Season(), curr_season or Season()
     P = {s["deal_id"]: s for s in prev}
     C = {s["deal_id"]: s for s in curr}
-    state = {i: _state(s, prev_as_of) for i, s in P.items()}
-    as_of = prev_as_of
-    before = _values(state, as_of, horizon, basis)
+    state = {i: _state(s, prev_as_of, prev_season) for i, s in P.items()}
+    as_of, season = prev_as_of, prev_season
+    before = _values(state, as_of, horizon, basis, season)
     prev_total = round(sum(before.values()))
     rows: list[dict] = []
 
@@ -61,7 +70,7 @@ def attribute(prev: list[dict], prev_as_of: date, curr: list[dict], curr_as_of: 
     def step(cause, change, describe):
         nonlocal before
         change()
-        after = _values(state, as_of, horizon, basis)
+        after = _values(state, as_of, horizon, basis, season)
         deltas = []
         for i in set(before) | set(after):
             d = after.get(i, 0.0) - before.get(i, 0.0)
@@ -98,7 +107,7 @@ def attribute(prev: list[dict], prev_as_of: date, curr: list[dict], curr_as_of: 
     def add_new():
         ids = [i for i in C if i not in P]
         for i in ids:  # walked at the previous date; the window shift step moves it on
-            state[i] = _state(C[i], curr_as_of)
+            state[i] = _state(C[i], curr_as_of, curr_season)
 
     step("new_deal", add_new, lambda i: f"New deal entered at {C[i]['stage'].lower()} stage")
 
@@ -116,7 +125,9 @@ def attribute(prev: list[dict], prev_as_of: date, curr: list[dict], curr_as_of: 
 
     step("value_change", edit(value_change, lambda i: C[i]["value"] != P[i]["value"]),
          lambda i: f"Value changed {_money(P[i]['value'])} to {_money(C[i]['value'])}")
-    step("stage_move", edit(lambda i, s: s.__setitem__("L", s["L"] + shift(i, "stage")), lambda i: C[i]["stage"] != P[i]["stage"]),
+    moved = lambda i: C[i]["stage"] != P[i]["stage"]  # noqa: E731
+    # a stage move also restarts the deal's stage clock, so its stall factor moves with it
+    step("stage_move", edit(lambda i, s: s.__setitem__("L", s["L"] + shift(i, "stage") + shift(i, "stalled")), moved),
          lambda i: f"Moved from {P[i]['stage'].lower()} to {C[i]['stage'].lower()}")
 
     def close_date(i, s):
@@ -126,14 +137,29 @@ def attribute(prev: list[dict], prev_as_of: date, curr: list[dict], curr_as_of: 
     step("close_date", edit(close_date, lambda i: C[i]["expected_close_date"] != P[i]["expected_close_date"]), lambda i: (
         f"Close date moved {P[i]['expected_close_date']:%d %b} to {C[i]['expected_close_date']:%d %b}"))
 
-    def silent_reason(i):
-        r = next((x for x in C[i]["reasons"] if x.startswith("silent")), None)
+    def aging(i):
+        """Time-driven factor moves: silence, the deal's age, and (if it stayed put) its stage clock."""
+        return {"silent": shift(i, "silent"), "age": shift(i, "age"), "stalled": 0.0 if moved(i) else shift(i, "stalled")}
+
+    def reason(i, needle):
+        return next((x for x in C[i]["reasons"] if needle in x), None)
+
+    def decay_reason(i):
+        parts = aging(i)
+        main = max(parts, key=lambda k: abs(parts[k]))
+        if main == "stalled":
+            r = reason(i, " days in ")
+            return f"Stalled: {r}" if r else f"Still in {C[i]['stage'].lower()}, chance easing"
+        if main == "age":
+            r = reason(i, "open ")
+            return f"Ageing: {r}" if r else "Older than its segment's usual cycle"
+        r = reason(i, "silent")
         if r:
             return f"No activity for {r.split()[1]} days"
-        return "New activity raised its chance" if shift(i, "silent") > 0 else "Quieter than before"
+        return "New activity raised its chance" if parts["silent"] > 0 else "Quieter than before"
 
-    # silence changes for every deal as days pass, so this step looks at all of them
-    step("decay", edit(lambda i, s: s.__setitem__("L", s["L"] + shift(i, "silent"))), silent_reason)
+    # silence, age and time in stage change for every deal as days pass, so this step looks at all of them
+    step("decay", edit(lambda i, s: s.__setitem__("L", s["L"] + sum(aging(i).values()))), decay_reason)
 
     # Cause 8 is "model retrain or calibration": land every deal on its new chance to win, so any
     # drift the factor steps did not explain (refit coefficients, intercept) is named here, not hidden.
@@ -149,16 +175,16 @@ def attribute(prev: list[dict], prev_as_of: date, curr: list[dict], curr_as_of: 
 
     step("calibration", edit(calibration), calibration_text)
 
-    def window():  # time passing: move the date and adopt the timing the model now gives each deal
-        nonlocal as_of
+    def window():  # time passing: move the date, the seasonal clock and the timing the model now gives each deal
+        nonlocal as_of, season
         for i in common:
-            fresh = _state(C[i], curr_as_of)
+            fresh = _state(C[i], curr_as_of, curr_season)
             state[i]["offset"], state[i]["cycle_sigma"] = fresh["offset"], fresh["cycle_sigma"]
-        as_of = curr_as_of
+        as_of, season = curr_as_of, curr_season
 
     step("window_shift", window, lambda i: "")
 
-    curr_total = round(expected_total(curr, curr_as_of, horizon, basis))
+    curr_total = round(expected_total(curr, curr_as_of, horizon, basis, curr_season))
     residual = curr_total - prev_total - sum(r["amount"] for r in rows)
     return dict(horizon=horizon, basis=basis, prev_total=prev_total, curr_total=curr_total, causes=rows, residual=residual)
 
@@ -198,3 +224,13 @@ if __name__ == "__main__":  # self-check: pure, no database
     assert sum(c["amount"] for c in r["causes"]) + r["residual"] == total
     assert abs(r["residual"]) <= 0.05 * abs(total) + 1, (r["residual"], total)
     print("attribution self-check ok:", len(r["causes"]), "rows, residual", r["residual"], "of", total)
+
+    # the same week on a seasonal clock, refit between runs: still sums exactly, residual stays small
+    autumn = Season([0.95, 1.0, 1.5, 0.7, 0.8, 1.15, 0.85, 0.9, 1.2, 0.95, 0.9, 1.1])
+    refit = Season([0.97, 1.0, 1.45, 0.72, 0.8, 1.15, 0.85, 0.9, 1.25, 0.95, 0.88, 1.08])
+    r = attribute(prev, d0, curr, d1, 30, "bookings", {"D0": "won"}, {"R-1": "Priya Nair"}, autumn, refit)
+    total = r["curr_total"] - r["prev_total"]
+    assert sum(c["amount"] for c in r["causes"]) + r["residual"] == total
+    assert abs(r["residual"]) <= 0.05 * abs(total) + 1, (r["residual"], total)
+    assert r["curr_total"] == round(expected_total(curr, d1, 30, "bookings", refit))
+    print("seasonal self-check ok:", len(r["causes"]), "rows, residual", r["residual"], "of", total)

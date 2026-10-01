@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
-import { ArrowDown } from 'lucide-react'
+import { ArrowDown, Briefcase, Flame, Search, SearchX, TriangleAlert } from 'lucide-react'
 import { api } from '../api/client'
-import { money, useApi, useRun } from '../lib'
+import { money, pct, useApi, useRun } from '../lib'
 import type { RiskDeal } from '../types'
+import { PageHeader } from '../components/AppShell'
 import { DealRow } from '../components/DealRow'
-import { Stage } from '../components/Stage'
-import { ErrorNote, HighlightWord, PillButton, Skeleton } from '../components/ui'
+import { PageSkeleton } from '../components/Loaders'
+import { Button, Card, EmptyState, ErrorNote, StatCard } from '../components/ui'
 
 type SortKey = 'expected_damage' | 'value' | 'p_win'
 const COLS: [SortKey | null, string, string][] = [
@@ -17,9 +18,9 @@ const COLS: [SortKey | null, string, string][] = [
 ]
 
 const Select = ({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (v: string) => void }) => (
-  <label className="flex items-center gap-2 text-sm">
-    {label}
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="rounded-full border-2 border-forest bg-white px-3 py-1">
+  <label className="flex items-center gap-2 text-sm text-muted">
+    <span className="whitespace-nowrap">{label}</span>
+    <select value={value} onChange={(e) => onChange(e.target.value)} className="field field-sm !w-auto cursor-pointer pr-8">
       <option value="">All</option>
       {options.map((o) => (
         <option key={o}>{o}</option>
@@ -30,75 +31,94 @@ const Select = ({ label, value, options, onChange }: { label: string; value: str
 
 export default function RiskPage() {
   const { runId } = useRun()
-  const { data, error } = useApi(() => api.risk(), [runId])
+  const { data, error, retry } = useApi(() => api.risk(), [runId])
   const [rep, setRep] = useState('')
   const [segment, setSegment] = useState('')
+  const [q, setQ] = useState('')
   const [sort, setSort] = useState<SortKey>('expected_damage')
   const [all, setAll] = useState(false)
   const TOP = 15
 
   const rows = useMemo(() => {
-    const list = (data ?? []).filter((d) => (!rep || d.rep === rep) && (!segment || d.segment === segment))
+    const needle = q.trim().toLowerCase()
+    const list = (data ?? []).filter(
+      (d) => (!rep || d.rep === rep) && (!segment || d.segment === segment) && (!needle || `${d.name} ${d.rep} ${d.reasons.join(' ')}`.toLowerCase().includes(needle)),
+    )
     // p_win ascending = least likely first; money columns descending.
-    return list.sort((a, b) => (sort === 'p_win' ? a.p_win - b.p_win : b[sort] - a[sort]))
-  }, [data, rep, segment, sort])
+    return [...list].sort((a, b) => (sort === 'p_win' ? a.p_win - b.p_win : b[sort] - a[sort]))
+  }, [data, rep, segment, q, sort])
   const uniq = (k: keyof RiskDeal) => [...new Set((data ?? []).map((d) => String(d[k])))].sort()
+  const damage = rows.reduce((s, d) => s + d.expected_damage, 0)
   const top3 = rows.slice(0, 3).reduce((s, d) => s + d.expected_damage, 0)
+  const max = Math.max(...rows.map((d) => d.expected_damage), 1)
+  const clear = () => (setRep(''), setSegment(''), setQ(''))
 
   return (
-    <Stage
-      title={<>Where the <HighlightWord>risk</HighlightWord> sits</>}
-      sub="Ranked by expected damage: deal value times the chance it does not close. Call from the top."
-      frameLabel="Deal risk table"
-      after={rows.length > 2 && <p className="text-lg">The top 3 rows carry {money(top3)} of expected damage.</p>}
-    >
-      {error && <ErrorNote>Deal risk did not load. {error}</ErrorNote>}
-      {!data && !error && <Skeleton label="Loading deal risk" />}
+    <>
+      <PageHeader title="Where the risk sits" sub="Ranked by expected damage: deal value times the chance it does not close. Call from the top." />
+
+      {error && <ErrorNote retry={retry}>Deal risk did not load. {error}</ErrorNote>}
+      {!data && !error && <PageSkeleton label="Loading deal risk" variant="table" />}
       {data && (
-        <>
-          <div className="flex flex-wrap items-center gap-4 border-b border-hair pb-4">
-            <Select label="Rep" value={rep} options={uniq('rep')} onChange={setRep} />
-            <Select label="Segment" value={segment} options={uniq('segment')} onChange={setSegment} />
-            <p className="text-sm text-ink/70 sm:ml-auto">{rows.length} open deals</p>
+        <div className="space-y-6">
+          <div className="stagger grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <StatCard i={0} label="Open deals in view" icon={Briefcase} value={rows.length} />
+            <StatCard i={1} label="Expected damage" icon={TriangleAlert} value={damage} format={money} tone="loss" foot="Value at risk across these deals" />
+            <StatCard i={2} label="Carried by the top 3" icon={Flame} value={damage ? top3 / damage : 0} format={(n) => pct(n)} foot={`${money(top3)} in three calls`} />
           </div>
-          {rows.length === 0 ? (
-            <p className="py-10 text-center text-sm">No deals match these filters. Set Rep or Segment back to All.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-sm">
-                <thead>
-                  <tr className="border-b border-ink text-xs text-ink/70">
-                    {COLS.map(([key, name, align]) => (
-                      <th key={name} scope="col" aria-sort={key === sort ? (key === 'p_win' ? 'ascending' : 'descending') : undefined} className={`py-2 pr-4 font-normal last:pr-0 ${align}`}>
-                        {key ? (
-                          <button type="button" onClick={() => setSort(key)} className={`inline-flex items-center gap-1 ${key === sort ? 'font-medium text-ink' : 'hover:text-ink'}`}>
-                            {name}
-                            {key === sort && <ArrowDown size={12} aria-hidden className={key === 'p_win' ? 'rotate-180' : ''} />}
-                          </button>
-                        ) : (
-                          name
-                        )}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {(all ? rows : rows.slice(0, TOP)).map((d) => (
-                    <DealRow key={d.deal_id} d={d} />
-                  ))}
-                </tbody>
-              </table>
-              {rows.length > TOP && (
-                <div className="flex justify-center border-t border-hair pt-5">
-                  <PillButton variant="secondary" icon={false} onClick={() => setAll((v) => !v)} aria-expanded={all}>
-                    {all ? `Show top ${TOP} only` : `Show all ${rows.length} deals`}
-                  </PillButton>
-                </div>
-              )}
+
+          <Card pad={false} className="write-in overflow-hidden">
+            <div className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:flex-wrap sm:items-center sm:px-6">
+              <label className="relative min-w-[220px] flex-1">
+                <span className="sr-only">Search deals</span>
+                <Search size={16} aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search deal, rep or reason" className="field field-sm !pl-9" />
+              </label>
+              <Select label="Rep" value={rep} options={uniq('rep')} onChange={setRep} />
+              <Select label="Segment" value={segment} options={uniq('segment')} onChange={setSegment} />
             </div>
-          )}
-        </>
+
+            {rows.length === 0 ? (
+              <EmptyState icon={SearchX} title="No deals match" action={<Button variant="secondary" onClick={clear}>Clear filters</Button>}>
+                Try another search, or set Rep and Segment back to All.
+              </EmptyState>
+            ) : (
+              <div className="overflow-x-auto px-4 sm:px-6">
+                <table className="w-full min-w-[760px] text-sm">
+                  <thead>
+                    <tr className="border-b border-line text-xs text-faint">
+                      {COLS.map(([key, name, align]) => (
+                        <th key={name} scope="col" aria-sort={key === sort ? (key === 'p_win' ? 'ascending' : 'descending') : undefined} className={`py-3 pr-4 font-medium last:pr-0 ${align}`}>
+                          {key ? (
+                            <button type="button" onClick={() => setSort(key)} className={`inline-flex items-center gap-1 rounded transition-colors ${key === sort ? 'text-brand' : 'hover:text-ink'}`}>
+                              {name}
+                              <ArrowDown size={12} aria-hidden className={`transition-all duration-300 ${key === sort ? 'opacity-100' : 'opacity-0'} ${key === 'p_win' ? 'rotate-180' : ''}`} />
+                            </button>
+                          ) : (
+                            name
+                          )}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody key={`${sort}-${rep}-${segment}`}>
+                    {(all ? rows : rows.slice(0, TOP)).map((d, i) => (
+                      <DealRow key={d.deal_id} d={d} i={i} max={max} />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {rows.length > TOP && (
+              <div className="flex justify-center border-t border-line p-4">
+                <Button variant="secondary" onClick={() => setAll((v) => !v)} aria-expanded={all}>
+                  {all ? `Show top ${TOP} only` : `Show all ${rows.length} deals`}
+                </Button>
+              </div>
+            )}
+          </Card>
+        </div>
       )}
-    </Stage>
+    </>
   )
 }

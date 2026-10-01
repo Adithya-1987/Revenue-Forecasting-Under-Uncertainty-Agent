@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import {
   Area,
   AreaChart,
@@ -16,31 +17,35 @@ import {
 } from 'recharts'
 import type { Accuracy, Changes, CauseType, Forecast } from '../types'
 import { money, shortDate } from '../lib'
+import { prefersReducedMotion, useChartColors } from '../theme'
 import { CAUSE_LABEL, groupCauses } from './Ledger'
 
-const C = { forest: '#1e2d26', sage: '#62785a', gain: '#3f7d3a', loss: '#b5452f', hair: '#dfe5dc', mute: '#c9d3c4' }
-const axis = { fontSize: 11, fill: '#16201e', fontFamily: 'Inter' }
 const moneyTick = (v: number) => money(v)
-// Recharts' formatter value type is loose; everything we chart is a number or [lo, hi].
+const anim = () => ({ isAnimationActive: !prefersReducedMotion(), animationDuration: 900, animationEasing: 'ease-out' as const })
 
-type Line = [label: string, value: string, tone?: 'gain' | 'loss']
+function useAxis() {
+  const c = useChartColors()
+  return { tick: { fontSize: 11, fill: c.faint, fontFamily: 'Manrope Variable, Manrope, sans-serif' }, c }
+}
+
+type TipLine = [label: string, value: string, tone?: 'gain' | 'loss']
 interface TipProps<T> {
   active?: boolean
   payload?: readonly { payload?: T }[]
   title: (d: T) => string
-  lines: (d: T) => Line[]
+  lines: (d: T) => TipLine[]
 }
 
-/** House tooltip: white card, hairline, tabular figures. Replaces Recharts' default grey box. */
+/** House tooltip: themed card, hairline, tabular figures. */
 function ChartTip<T>({ active, payload, title, lines }: TipProps<T>) {
   const d = payload?.[0]?.payload
   if (!active || !d) return null
   return (
-    <div className="min-w-[160px] rounded-card border border-forest/10 bg-white px-3 py-2 text-xs shadow-[0_8px_24px_-12px_rgba(30,45,38,0.4)]">
-      <p className="mb-1 font-medium text-ink">{title(d)}</p>
+    <div className="min-w-[170px] rounded-xl border border-line bg-surface/95 px-3 py-2.5 text-xs shadow-pop backdrop-blur">
+      <p className="mb-1.5 font-semibold text-ink">{title(d)}</p>
       {lines(d).map(([k, v, tone]) => (
-        <p key={k} className="flex justify-between gap-4">
-          <span className="text-ink/70">{k}</span>
+        <p key={k} className="flex justify-between gap-4 py-0.5">
+          <span className="text-muted">{k}</span>
           <span className={`font-medium ${tone === 'loss' ? 'text-loss' : tone === 'gain' ? 'text-gain' : 'text-ink'}`}>{v}</span>
         </p>
       ))}
@@ -51,9 +56,11 @@ function ChartTip<T>({ active, payload, title, lines }: TipProps<T>) {
 /**
  * The signature chart: futures fan out over the horizon (left), then land (right).
  * Both halves share one money axis, so the landing curve reads straight off the fan's end,
- * and the target line runs through both. Green under the curve = futures that reach the target.
+ * and the target line runs through both. Blue under the curve = futures that reach the target.
  */
-export function FanLanding({ f }: { f: Forecast }) {
+export function FanLanding({ f, height = 'h-72 sm:h-80' }: { f: Forecast; height?: string }) {
+  const { tick, c } = useAxis()
+  const id = useId().replace(/:/g, '')
   const width = f.histogram.length > 1 ? f.histogram[1].bin - f.histogram[0].bin : 1
   // 3-bin moving average: the curve shows the shape, not sampling noise
   const smooth = f.histogram.map((_, i, h) => (h[Math.max(i - 1, 0)].count + 2 * h[i].count + h[Math.min(i + 1, h.length - 1)].count) / 4)
@@ -71,29 +78,35 @@ export function FanLanding({ f }: { f: Forecast }) {
       role="img"
       aria-label={`Over ${f.horizon} days the range widens to ${money(f.p10)} to ${money(f.p90)}. ` +
         `${Math.round(f.prob_hit_target * 100)}% of 10,000 simulated futures reach the target of ${money(f.target)}.`}
-      className="grid h-72 grid-cols-[1fr_minmax(120px,26%)] sm:h-80"
+      className={`grid grid-cols-[1fr_minmax(110px,26%)] ${height}`}
     >
       <ResponsiveContainer>
         <ComposedChart data={f.series} margin={{ ...margin, right: 4 }}>
-          <CartesianGrid stroke={C.hair} vertical={false} />
-          <XAxis dataKey="date" tickFormatter={shortDate} tick={axis} tickLine={false} axisLine={{ stroke: C.hair }} minTickGap={28} height={24} />
-          <YAxis domain={domain} tickFormatter={moneyTick} tick={axis} tickLine={false} axisLine={false} width={56} />
+          <defs>
+            <linearGradient id={`outer${id}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor={c.sky} stopOpacity={0.28} />
+              <stop offset="1" stopColor={c.sky} stopOpacity={0.1} />
+            </linearGradient>
+          </defs>
+          <CartesianGrid stroke={c.line} strokeDasharray="3 4" vertical={false} />
+          <XAxis dataKey="date" tickFormatter={shortDate} tick={tick} tickLine={false} axisLine={{ stroke: c.line }} minTickGap={28} height={24} />
+          <YAxis domain={domain} tickFormatter={moneyTick} tick={tick} tickLine={false} axisLine={false} width={56} />
           <Tooltip
-            cursor={{ stroke: C.forest, strokeOpacity: 0.2 }}
+            cursor={{ stroke: c.brand, strokeOpacity: 0.35, strokeDasharray: '4 4' }}
             content={(p) => (
               <ChartTip<Forecast['series'][0]> {...p} title={(d) => `By ${shortDate(d.date)}`}
-                lines={(d) => [['Best', money(d.p90)], ['Median', money(d.p50)], ['Worst', money(d.p10)]]} />
+                lines={(d) => [['Best (P90)', money(d.p90)], ['Median', money(d.p50)], ['Worst (P10)', money(d.p10)]]} />
             )}
           />
-          <Area type="monotone" dataKey={(d: Forecast['series'][0]) => band(d, 'p10', 'p90')} fill={C.sage} fillOpacity={0.16} stroke={C.sage} strokeOpacity={0.35} strokeWidth={1} isAnimationActive={false} />
-          <Area type="monotone" dataKey={(d: Forecast['series'][0]) => band(d, 'p25', 'p75')} fill={C.sage} fillOpacity={0.3} stroke="none" isAnimationActive={false} />
-          <Line type="monotone" dataKey="p50" stroke={C.forest} strokeWidth={2.5} dot={false} isAnimationActive={false} />
-          <ReferenceLine y={f.target} stroke={C.forest} strokeDasharray="5 4" strokeOpacity={0.7}
-            label={{ value: `Target ${money(f.target)}`, position: 'insideTopLeft', fontSize: 11, fill: C.forest, offset: 8 }} />
+          <Area type="monotone" dataKey={(d: Forecast['series'][0]) => band(d, 'p10', 'p90')} fill={`url(#outer${id})`} stroke={c.sky} strokeOpacity={0.6} strokeWidth={1} {...anim()} />
+          <Area type="monotone" dataKey={(d: Forecast['series'][0]) => band(d, 'p25', 'p75')} fill={c.brand} fillOpacity={0.18} stroke="none" {...anim()} />
+          <Line type="monotone" dataKey="p50" stroke={c.brand} strokeWidth={2.5} dot={false} activeDot={{ r: 5, strokeWidth: 2, stroke: c.surface }} {...anim()} />
+          <ReferenceLine y={f.target} stroke={c.target} strokeDasharray="6 4" strokeWidth={1.5}
+            label={{ value: `Target ${money(f.target)}`, position: 'insideTopLeft', fontSize: 11, fill: c.target, offset: 8 }} />
         </ComposedChart>
       </ResponsiveContainer>
 
-      <div className="relative border-l border-hair">
+      <div className="relative border-l border-dashed border-line">
         <ResponsiveContainer>
           <AreaChart data={land} layout="vertical" margin={{ ...margin, left: 0 }}>
             <XAxis type="number" hide domain={[0, 'dataMax']} />
@@ -101,12 +114,12 @@ export function FanLanding({ f }: { f: Forecast }) {
             <YAxis type="number" dataKey="mid" domain={domain} hide reversed />
             {/* a hidden x axis still needs the fan's bottom axis height so both plots line up */}
             <XAxis xAxisId="pad" orientation="bottom" height={24} tick={false} axisLine={false} />
-            <Area type="monotone" dataKey="miss" fill={C.mute} fillOpacity={0.9} stroke={C.sage} strokeWidth={1} isAnimationActive={false} />
-            <Area type="monotone" dataKey="hit" fill={C.gain} fillOpacity={0.9} stroke={C.gain} strokeWidth={1.5} isAnimationActive={false} />
-            <ReferenceLine y={f.target} stroke={C.forest} strokeDasharray="5 4" strokeOpacity={0.7} />
+            <Area type="monotone" dataKey="miss" fill={c.faint} fillOpacity={0.14} stroke={c.faint} strokeOpacity={0.45} strokeWidth={1} {...anim()} />
+            <Area type="monotone" dataKey="hit" fill={c.brand} fillOpacity={0.35} stroke={c.brand} strokeWidth={1.5} {...anim()} />
+            <ReferenceLine y={f.target} stroke={c.target} strokeDasharray="6 4" strokeWidth={1.5} />
           </AreaChart>
         </ResponsiveContainer>
-        <p className="pointer-events-none absolute right-2 top-1 text-right text-xs leading-tight text-ink/70">
+        <p className="pointer-events-none absolute right-2 top-1 text-right text-2xs leading-tight text-faint">
           Where 10,000
           <br />
           futures land
@@ -124,6 +137,7 @@ interface WaterfallProps {
 
 /** Previous total, one floating bar per cause, residual, current total. Cause bars are clickable. */
 export function Waterfall({ changes, selected, onSelect }: WaterfallProps) {
+  const { tick, c } = useAxis()
   const steps = [
     ...groupCauses(changes).map((g) => ({ name: CAUSE_LABEL[g.type][1], type: g.type as CauseType | null, amount: g.amount })),
     { name: 'Residual', type: null, amount: changes.residual },
@@ -133,24 +147,24 @@ export function Waterfall({ changes, selected, onSelect }: WaterfallProps) {
   const moves = steps.map((s) => {
     const from = run
     run += s.amount
-    return { name: s.name, lo: Math.min(from, run), hi: Math.max(from, run), signed: s.amount, fill: s.amount < 0 ? C.loss : C.gain, type: s.type }
+    return { name: s.name, lo: Math.min(from, run), hi: Math.max(from, run), signed: s.amount, fill: s.amount < 0 ? c.loss : c.gain, type: s.type }
   })
   const floor = Math.floor((Math.min(...moves.map((m) => m.lo), changes.curr_total) * 0.9) / 1e5) * 1e5
   const data = [
-    { name: 'Last run', lo: floor, hi: changes.prev_total, signed: changes.prev_total, fill: C.forest, type: null },
+    { name: 'Last run', lo: floor, hi: changes.prev_total, signed: changes.prev_total, fill: c.faint, type: null },
     ...moves,
-    { name: 'This run', lo: floor, hi: changes.curr_total, signed: changes.curr_total, fill: C.forest, type: null },
+    { name: 'This run', lo: floor, hi: changes.curr_total, signed: changes.curr_total, fill: c.brand, type: null },
   ]
 
   return (
-    <div role="img" aria-label={`Waterfall from ${money(changes.prev_total)} to ${money(changes.curr_total)}. The table below lists every step.`} className="h-64">
+    <div role="img" aria-label={`Waterfall from ${money(changes.prev_total)} to ${money(changes.curr_total)}. The ledger lists every step.`} className="h-72">
       <ResponsiveContainer>
-        <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid stroke={C.hair} vertical={false} />
-          <XAxis dataKey="name" tick={axis} tickLine={false} axisLine={{ stroke: C.hair }} interval={0} />
-          <YAxis domain={[floor, 'auto']} tickFormatter={moneyTick} tick={axis} tickLine={false} axisLine={false} width={56} />
+        <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
+          <CartesianGrid stroke={c.line} strokeDasharray="3 4" vertical={false} />
+          <XAxis dataKey="name" tick={tick} tickLine={false} axisLine={{ stroke: c.line }} interval={0} />
+          <YAxis domain={[floor, 'auto']} tickFormatter={moneyTick} tick={tick} tickLine={false} axisLine={false} width={56} />
           <Tooltip
-            cursor={{ fill: '#d9f79a', fillOpacity: 0.35 }}
+            cursor={{ fill: c.ink, fillOpacity: 0.04 }}
             content={(p) => (
               <ChartTip<(typeof data)[number]> {...p} title={(d) => d.name}
                 lines={(d) => [[d.type || d.name === 'Residual' ? 'Change' : 'Total', money(d.signed), d.type || d.name === 'Residual' ? (d.signed < 0 ? 'loss' : 'gain') : undefined]]} />
@@ -159,7 +173,7 @@ export function Waterfall({ changes, selected, onSelect }: WaterfallProps) {
           <Bar
             dataKey={(d: { lo: number; hi: number }) => [d.lo, d.hi]}
             radius={3}
-            isAnimationActive={false}
+            {...anim()}
             onClick={(d) => {
               const t = (d as unknown as { type: CauseType | null }).type
               if (t) onSelect(t)
@@ -169,8 +183,9 @@ export function Waterfall({ changes, selected, onSelect }: WaterfallProps) {
               <Cell
                 key={d.name}
                 fill={d.fill}
+                fillOpacity={selected && d.type && d.type !== selected ? 0.35 : 1}
                 cursor={d.type ? 'pointer' : 'default'}
-                stroke={d.type && d.type === selected ? C.forest : 'none'}
+                stroke={d.type && d.type === selected ? c.ink : 'none'}
                 strokeWidth={2}
               />
             ))}
@@ -181,36 +196,82 @@ export function Waterfall({ changes, selected, onSelect }: WaterfallProps) {
   )
 }
 
-/** Predicted bars, P10-P90 band, actual dots. A rust dot fell outside the band. */
+/** Predicted bars, P10-P90 band, actual dots. A red dot fell outside the band. */
 export function AccuracyChart({ history }: { history: Accuracy['history'] }) {
+  const { tick, c } = useAxis()
   return (
-    <div role="img" aria-label="Past 30-day forecasts against what actually closed" className="h-64">
+    <div role="img" aria-label="Past 30-day forecasts against what actually closed" className="h-72">
       <ResponsiveContainer>
         <ComposedChart data={history} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid stroke={C.hair} vertical={false} />
-          <XAxis dataKey="run_at" tick={axis} tickLine={false} axisLine={{ stroke: C.hair }} minTickGap={16} />
-          <YAxis tickFormatter={moneyTick} tick={axis} tickLine={false} axisLine={false} width={56} domain={['dataMin - 200000', 'auto']} />
+          <CartesianGrid stroke={c.line} strokeDasharray="3 4" vertical={false} />
+          <XAxis dataKey="run_at" tick={tick} tickLine={false} axisLine={{ stroke: c.line }} minTickGap={16} />
+          <YAxis tickFormatter={moneyTick} tick={tick} tickLine={false} axisLine={false} width={56} domain={['dataMin - 200000', 'auto']} />
           <Tooltip
-            cursor={{ fill: C.forest, fillOpacity: 0.05 }}
+            cursor={{ fill: c.brand, fillOpacity: 0.06 }}
             content={(p) => (
               <ChartTip<Accuracy['history'][0]> {...p} title={(d) => d.run_at}
                 lines={(d) => [['Forecast', money(d.predicted)], ['Actual', money(d.actual), d.actual < d.p10 || d.actual > d.p90 ? 'loss' : undefined], ['Range', `${money(d.p10)} to ${money(d.p90)}`]]} />
             )}
           />
-          <Area dataKey={(d: Accuracy['history'][0]) => [d.p10, d.p90]} name="Worst to best" fill={C.sage} fillOpacity={0.2} stroke="none" isAnimationActive={false} />
-          <Bar dataKey="predicted" name="Expected" fill={C.gain} barSize={14} radius={[3, 3, 0, 0]} isAnimationActive={false} />
+          <Area dataKey={(d: Accuracy['history'][0]) => [d.p10, d.p90]} name="Worst to best" fill={c.sky} fillOpacity={0.2} stroke={c.sky} strokeOpacity={0.5} {...anim()} />
+          <Bar dataKey="predicted" name="Expected" fill={c.brand} fillOpacity={0.85} barSize={14} radius={[5, 5, 0, 0]} {...anim()} />
           <Scatter
             dataKey="actual"
             name="Actual"
-            isAnimationActive={false}
+            {...anim()}
             shape={(p: { cx?: number; cy?: number; payload?: Accuracy['history'][0] }) => {
               const h = p.payload!
               const out = h.actual < h.p10 || h.actual > h.p90
-              return <circle cx={p.cx} cy={p.cy} r={5} fill={out ? C.loss : '#fff'} stroke={out ? C.loss : C.forest} strokeWidth={2} />
+              return <circle cx={p.cx} cy={p.cy} r={5} fill={out ? c.loss : c.surface} stroke={out ? c.loss : c.ink} strokeWidth={2} />
             }}
           />
         </ComposedChart>
       </ResponsiveContainer>
     </div>
+  )
+}
+
+/** Tiny trend line for KPI cards. */
+export function Sparkline({ values, tone = 'brand' }: { values: number[]; tone?: 'brand' | 'gain' | 'loss' }) {
+  const c = useChartColors()
+  const id = useId().replace(/:/g, '')
+  const color = c[tone]
+  const data = values.map((v, i) => ({ i, v }))
+  return (
+    <div aria-hidden className="h-10 w-24">
+      <ResponsiveContainer>
+        <AreaChart data={data} margin={{ top: 2, right: 0, left: 0, bottom: 2 }}>
+          <defs>
+            <linearGradient id={`sp${id}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor={color} stopOpacity={0.35} />
+              <stop offset="1" stopColor={color} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <YAxis hide domain={['dataMin', 'dataMax']} />
+          <Area type="monotone" dataKey="v" stroke={color} strokeWidth={2} fill={`url(#sp${id})`} {...anim()} />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+
+/** Horizontal share bars (top deals), grown from zero on mount. */
+export function ShareBars({ items, format }: { items: { name: string; share: number }[]; format: (n: number) => string }) {
+  const max = Math.max(...items.map((d) => d.share), 0.0001)
+  return (
+    <ul className="space-y-3 stagger">
+      {items.map((d, i) => (
+        <li key={d.name} className="grid grid-cols-[minmax(0,140px)_1fr_52px] items-center gap-3 text-sm" style={{ '--i': i } as React.CSSProperties}>
+          <span className="truncate font-medium">{d.name}</span>
+          <span aria-hidden className="h-2.5 overflow-hidden rounded-full bg-surface-2">
+            <span
+              className="block h-full origin-left animate-[grow_800ms_cubic-bezier(0.22,1,0.36,1)_both] rounded-full bg-brand"
+              style={{ width: `${(d.share / max) * 100}%`, animationDelay: `${200 + i * 90}ms` }}
+            />
+          </span>
+          <span className="text-right text-muted">{format(d.share)}</span>
+        </li>
+      ))}
+    </ul>
   )
 }

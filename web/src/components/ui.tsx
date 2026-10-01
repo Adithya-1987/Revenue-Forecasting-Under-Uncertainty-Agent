@@ -1,22 +1,30 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowDown, ArrowUp, ArrowUpRight, Loader2 } from 'lucide-react'
+import { AlertTriangle, ArrowDownRight, ArrowRight, ArrowUpRight, RotateCw, type LucideIcon } from 'lucide-react'
+import CountUp from './reactbits/CountUp'
+import { Spinner } from './Loaders'
 
-type PillProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'secondary'
+/* ------------------------------------------------------------------ buttons */
+
+type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  variant?: 'primary' | 'secondary' | 'ghost' | 'onnavy'
+  size?: 'sm' | 'md' | 'lg'
   to?: string
-  icon?: boolean
   busy?: boolean
+  icon?: LucideIcon
+  /** Trailing arrow for "go somewhere" actions. */
+  arrow?: boolean
 }
 
-/** The one button style: a lifting pill. Primary is forest, secondary is white. */
-export function PillButton({ variant = 'primary', to, icon = true, busy, className = '', children, ...rest }: PillProps) {
-  const cls = `btn-lift ${variant === 'secondary' ? 'btn-lift--light' : ''} ${className}`
+export function Button({ variant = 'primary', size = 'md', to, busy, icon: Icon, arrow, className = '', children, ...rest }: ButtonProps) {
+  const cls = `btn btn-${variant} ${size === 'sm' ? 'btn-sm' : size === 'lg' ? 'btn-lg' : ''} group ${className}`
   const body = (
     <>
-      {busy && <Loader2 size={15} aria-hidden className="animate-spin motion-reduce:animate-none" />}
+      {busy ? <Spinner size={16} /> : Icon && <Icon size={size === 'sm' ? 15 : 17} aria-hidden />}
       {children}
-      {icon && !busy && <ArrowUpRight size={15} aria-hidden />}
+      {arrow && !busy && (
+        <ArrowRight size={16} aria-hidden className="transition-transform duration-200 ease-out group-hover:translate-x-0.5" />
+      )}
     </>
   )
   return to ? (
@@ -30,26 +38,55 @@ export function PillButton({ variant = 'primary', to, icon = true, busy, classNa
   )
 }
 
-/** White chip behind one key headline word, as in the reference. One per headline. */
-export const HighlightWord = ({ children }: { children: ReactNode }) => (
-  <span className="rounded-lg bg-white px-2 [box-decoration-break:clone]">{children}</span>
-)
-
-export const ReasonChip = ({ children }: { children: ReactNode }) => (
-  <span className="inline-block whitespace-nowrap rounded-full bg-[#eef3e8] px-2 py-0.5 text-xs text-forest">
+export const MoreLink = ({ to, children }: { to: string; children: ReactNode }) => (
+  <Link to={to} className="group inline-flex items-center gap-1 rounded-md text-sm font-medium text-brand">
     {children}
-  </span>
+    <ArrowRight aria-hidden size={15} className="transition-transform duration-200 group-hover:translate-x-0.5" />
+  </Link>
 )
 
-/** Circular arrow badge + signed percent. Arrow carries the meaning, colour backs it up. */
-export function DeltaBadge({ value }: { value: number }) {
-  const up = value >= 0
-  const Icon = up ? ArrowUp : ArrowDown
+/* ------------------------------------------------------------------ surfaces */
+
+export function Card({ title, sub, action, children, className = '', pad = true, style }: {
+  title?: ReactNode
+  sub?: ReactNode
+  action?: ReactNode
+  children: ReactNode
+  className?: string
+  pad?: boolean
+  style?: React.CSSProperties
+}) {
+  const inner = (
+    <>
+      {(title || action) && (
+        <div className={`flex flex-wrap items-start justify-between gap-3 ${pad ? '' : 'px-5 pt-5 sm:px-6 sm:pt-6'}`}>
+          <div className="min-w-0">
+            {title && <h2 className="text-lg font-semibold tracking-tight">{title}</h2>}
+            {sub && <p className="mt-0.5 text-sm text-muted">{sub}</p>}
+          </div>
+          {action}
+        </div>
+      )}
+      <div className={title || action ? 'mt-4' : ''}>{children}</div>
+    </>
+  )
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${up ? 'text-gain' : 'text-loss'}`}>
-      <span className={`grid size-5 place-items-center rounded-full border ${up ? 'border-gain' : 'border-loss'}`}>
-        <Icon size={12} aria-hidden />
-      </span>
+    <section className={`card ${pad ? 'card-pad' : ''} ${className}`} style={style}>
+      {inner}
+    </section>
+  )
+}
+
+/* ------------------------------------------------------------------ figures */
+
+/** Signed % change with an arrow; the arrow and sign carry meaning, colour backs them up. */
+export function DeltaBadge({ value, invert = false }: { value: number; invert?: boolean }) {
+  const up = value >= 0
+  const good = invert ? !up : up
+  const Icon = up ? ArrowUpRight : ArrowDownRight
+  return (
+    <span className={`chip ${good ? 'chip-gain' : 'chip-loss'}`}>
+      <Icon size={13} aria-hidden />
       {up ? '+' : '−'}
       {Math.abs(value * 100).toFixed(1)}%
     </span>
@@ -58,75 +95,161 @@ export function DeltaBadge({ value }: { value: number }) {
 
 interface StatProps {
   label: string
-  value: string
-  delta?: number
-  note?: string
-  className?: string
-  /** A small picture of the number, drawn beside it. */
+  icon?: LucideIcon
+  /** Animated when numeric; `format` renders it. */
+  value: number | string
+  format?: (n: number) => string
+  tone?: 'ink' | 'gain' | 'loss'
+  foot?: ReactNode
   visual?: ReactNode
-  children?: ReactNode
+  i?: number
 }
 
-/** White card that overlaps the device frame on wide screens and becomes an inline tile on mobile. */
-export const StatFloat = ({ label, value, delta, note, className = '', visual, children }: StatProps) => (
-  <div className={`rounded-card border border-forest/10 bg-white px-4 py-3 shadow-[0_1px_2px_rgba(30,45,38,0.06),0_12px_32px_-16px_rgba(30,45,38,0.35)] xl:min-w-[184px] ${className}`}>
-    <p className="text-xs text-ink/70">{label}</p>
-    <div className="mt-1 flex items-center justify-between gap-3">
-      <p className="font-head text-xl font-bold">{value}</p>
-      {visual}
+/** KPI tile: label, counting figure, footnote. Icon sits quietly beside the label. */
+export function StatCard({ label, icon: Icon, value, format, tone = 'ink', foot, visual, i = 0 }: StatProps) {
+  return (
+    <div className="card card-pad" style={{ '--i': i } as React.CSSProperties}>
+      <div className="flex items-center gap-3 text-sm text-muted">
+        {Icon && <IconDisc icon={Icon} />}
+        {label}
+      </div>
+      <div className="mt-4 flex items-end justify-between gap-3">
+        <p className={`text-[26px] font-semibold leading-none tracking-tight ${tone === 'gain' ? 'text-gain' : tone === 'loss' ? 'text-loss' : 'text-ink'}`}>
+          {typeof value === 'number' ? <CountUp to={value} format={format} /> : value}
+        </p>
+        {visual}
+      </div>
+      {foot && <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted">{foot}</div>}
     </div>
-    {delta != null && (
-      <p className="mt-1">
-        <DeltaBadge value={delta} />
-      </p>
-    )}
-    {note && <p className="mt-1 text-xs text-ink/70">{note}</p>}
-    {children}
-  </div>
+  )
+}
+
+/** An icon on a white disc: the reference's stat marker. */
+export const IconDisc = ({ icon: Icon, size = 40 }: { icon: LucideIcon; size?: number }) => (
+  <span
+    className="grid shrink-0 place-items-center rounded-full bg-white/90 text-brand shadow-[0_1px_2px_rgb(var(--shadow)/0.08),0_6px_14px_-8px_rgb(var(--shadow)/0.35)] dark:bg-white/10"
+    style={{ width: size, height: size }}
+  >
+    <Icon size={Math.round(size * 0.45)} aria-hidden />
+  </span>
 )
 
-export const KpiTile = ({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) => (
-  <div className="px-4 py-3">
-    <p className="text-xs text-ink/70">{label}</p>
-    <p className="mt-1 font-head text-xl font-bold">{value}</p>
-    {sub && <div className="mt-1 text-xs text-ink/70">{sub}</div>}
-  </div>
-)
-
-export const ErrorNote = ({ children }: { children: ReactNode }) => (
-  <p role="alert" className="rounded-card border border-loss/40 bg-white p-4 text-sm text-loss">
-    {children}
-  </p>
-)
-
-/** Small chip pinned to the top edge of the device frame. */
-export const FrameChip = ({ children, className = '' }: { children: ReactNode; className?: string }) => (
-  <div className={`absolute -top-4 z-10 flex items-center gap-2 rounded-full border border-forest/15 bg-white px-3 py-1.5 text-xs ${className}`}>
-    {children}
-  </div>
-)
-
-/** Static placeholder while data loads: the shape of what is coming, no shimmer. */
-export const Skeleton = ({ label }: { label: string }) => (
-  <div role="status" aria-label={label} className="space-y-6">
-    <div className="h-6 w-48 rounded-md bg-hair/70" />
-    <div className="h-20 rounded-card bg-hair/50" />
-    <div className="grid gap-6 lg:grid-cols-2">
-      <div className="h-52 rounded-card bg-hair/50" />
-      <div className="h-52 rounded-card bg-hair/50" />
-    </div>
-  </div>
-)
+export const ReasonChip = ({ children }: { children: ReactNode }) => <span className="chip chip-neutral">{children}</span>
 
 /** Probability as a ring: the arc is the share of futures that make it. */
-export function RingGauge({ value, label }: { value: number; label: string }) {
-  const r = 20
+export function RingGauge({ value, label, size = 48 }: { value: number; label: string; size?: number }) {
+  const r = 19
   const c = 2 * Math.PI * r
+  const [shown, setShown] = useState(0)
+  useLayoutEffect(() => {
+    const id = requestAnimationFrame(() => setShown(Math.min(Math.max(value, 0), 1)))
+    return () => cancelAnimationFrame(id)
+  }, [value])
   return (
-    <svg viewBox="0 0 48 48" className="size-12 -rotate-90" role="img" aria-label={label}>
-      <circle cx="24" cy="24" r={r} fill="none" stroke="rgb(var(--hair))" strokeWidth="6" />
-      <circle cx="24" cy="24" r={r} fill="none" stroke="rgb(var(--gain))" strokeWidth="6" strokeLinecap="round"
-        strokeDasharray={`${c * Math.min(Math.max(value, 0), 1)} ${c}`} className="band-move" />
+    <svg viewBox="0 0 48 48" width={size} height={size} className="-rotate-90" role="img" aria-label={label}>
+      <circle cx="24" cy="24" r={r} fill="none" stroke="rgb(var(--ink) / 0.08)" strokeWidth="6" />
+      <circle cx="24" cy="24" r={r} fill="none" stroke="rgb(var(--sky))" strokeWidth="6" strokeLinecap="round"
+        strokeDasharray={`${c * shown} ${c}`} className="band-move" />
     </svg>
+  )
+}
+
+/* ------------------------------------------------------------------ states */
+
+export function ErrorNote({ children, retry }: { children: ReactNode; retry?: () => void }) {
+  return (
+    <div role="alert" className="card flex flex-col items-start gap-3 border-loss/30 p-5 sm:flex-row sm:items-center">
+      <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-loss/10 text-loss">
+        <AlertTriangle size={18} aria-hidden />
+      </span>
+      <p className="flex-1 text-sm text-ink">{children}</p>
+      {retry && (
+        <Button variant="secondary" size="sm" icon={RotateCw} onClick={retry}>
+          Try again
+        </Button>
+      )}
+    </div>
+  )
+}
+
+export function EmptyState({ icon: Icon, title, children, action }: { icon: LucideIcon; title: string; children?: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center px-4 py-12 text-center">
+      <IconDisc icon={Icon} size={48} />
+      <p className="mt-4 text-md font-semibold">{title}</p>
+      {children && <p className="mt-1 max-w-[46ch] text-sm text-muted">{children}</p>}
+      {action && <div className="mt-5">{action}</div>}
+    </div>
+  )
+}
+
+/* ------------------------------------------------------------------ segmented control */
+
+interface SegProps<T extends string | number> {
+  options: { value: T; label: string; icon?: LucideIcon }[]
+  value: T
+  onChange: (v: T) => void
+  label: string
+  size?: 'sm' | 'md'
+}
+
+/** Radio group with a thumb that glides to the selected option. */
+export function Segmented<T extends string | number>({ options, value, onChange, label, size = 'md' }: SegProps<T>) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([])
+  const [thumb, setThumb] = useState<{ left: number; width: number }>()
+  const idx = options.findIndex((o) => o.value === value)
+
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = refs.current[idx]
+      if (el) setThumb({ left: el.offsetLeft, width: el.offsetWidth })
+    }
+    measure()
+    document.fonts?.ready.then(measure).catch(() => {})
+    window.addEventListener('resize', measure)
+    return () => window.removeEventListener('resize', measure)
+  }, [idx, options.length])
+
+  const move = (dir: 1 | -1) => {
+    const n = (idx + dir + options.length) % options.length
+    onChange(options[n].value)
+    refs.current[n]?.focus()
+  }
+
+  return (
+    <div role="radiogroup" aria-label={label} className="glass relative inline-flex rounded-full p-1">
+      {thumb && (
+        <span
+          aria-hidden
+          className="absolute inset-y-1 rounded-full bg-white shadow-[0_1px_2px_rgb(var(--shadow)/0.12),0_4px_10px_-4px_rgb(var(--shadow)/0.3)] transition-all duration-200 ease-out dark:bg-white/15"
+          style={{ left: thumb.left, width: thumb.width }}
+        />
+      )}
+      {options.map((o, i) => {
+        const on = o.value === value
+        const Icon = o.icon
+        return (
+          <button
+            key={o.value}
+            ref={(el) => void (refs.current[i] = el)}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            tabIndex={on ? 0 : -1}
+            onClick={() => onChange(o.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowRight' || e.key === 'ArrowDown') (e.preventDefault(), move(1))
+              if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') (e.preventDefault(), move(-1))
+            }}
+            className={`relative z-10 inline-flex items-center gap-1.5 rounded-full font-medium transition-colors duration-200 ${
+              size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-8 px-3 text-sm'
+            } ${on ? 'text-ink' : 'text-muted hover:text-ink'}`}
+          >
+            {Icon && <Icon size={14} aria-hidden />}
+            {o.label}
+          </button>
+        )
+      })}
+    </div>
   )
 }

@@ -16,8 +16,10 @@ NAIVE = {"Qualify": 0.10, "Demo": 0.25, "Proposal": 0.50, "Negotiation": 0.75}  
 
 
 def as_seen_at(d: dict, t: date) -> dict:
-    """History features are recorded at close - 21d; replay the same silence at date t."""
-    return dict(d, last_activity_date=t - ((d["closed_at"] - OBS_LAG) - d["last_activity_date"]))
+    """History features are recorded at close - 21d; replay the same silence and time in stage at date t."""
+    obs = d["closed_at"] - OBS_LAG
+    return dict(d, last_activity_date=t - (obs - d["last_activity_date"]),
+                stage_entered_at=max(t - max(obs - d["stage_entered_at"], timedelta(0)), d["created_at"]))
 
 
 def report(deals: list[dict], as_of: date, points: int = 12) -> dict:
@@ -29,7 +31,8 @@ def report(deals: list[dict], as_of: date, points: int = 12) -> dict:
         open_t = [as_seen_at(d, t) for d in closed if d["created_at"] <= t < d["closed_at"]]
         if len(known) < 200 or not open_t:
             continue
-        res = simulate(deal_inputs(fit(known, bootstrap=0), open_t, t), t, {})
+        model = fit(known, t, bootstrap=0)
+        res = simulate(deal_inputs(model, open_t, t), t, {}, season=model["season"])
         for h in (30, 60, 90):
             actual = sum(d["value"] for d in open_t if d["status"] == "won" and d["closed_at"] <= t + timedelta(days=h))
             if actual:
@@ -43,7 +46,7 @@ def report(deals: list[dict], as_of: date, points: int = 12) -> dict:
 
     # Rep scoreboard: "committed" = what a neutral rep would have closed on the same deals (the model),
     # score = the shrunk calibration factor the forecast actually applies.
-    full = fit(closed, bootstrap=0)
+    full = fit(closed, as_of, bootstrap=0)
     reps = []
     for rep in sorted({d["salesperson_id"] for d in closed}):
         mine = [i for i, d in enumerate(closed) if d["salesperson_id"] == rep]

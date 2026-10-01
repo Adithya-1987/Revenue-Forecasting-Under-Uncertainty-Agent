@@ -1,33 +1,43 @@
-"""Monte Carlo range (P10/P50/P90, chance of target) and the exact expected value attribution walks."""
+"""Monte Carlo range (P10/P50/P90, chance of target) and the exact expected value attribution walks.
+
+Deal timing is drawn in business days and turned into calendar days on the seasonal clock (engine/season.py).
+"""
 import math
 from datetime import date, timedelta
 
 import numpy as np
 from scipy.stats import norm
 
+from engine.season import Season
+
 HORIZONS = (30, 60, 90)
 BASES = ("bookings", "cash")
 TRIALS = 10_000
 
 
-def expected_by_deal(deals: list[dict], horizon: int, basis: str) -> np.ndarray:
+def expected_by_deal(deals: list[dict], horizon: int, basis: str, as_of: date | None = None,
+                     season: Season | None = None) -> np.ndarray:
     """E[revenue in window] per deal = value * p_win * P(lands within horizon). Exact, no noise.
 
-    Cash uses the median payment delay as a fixed shift so the value stays closed-form.
+    Cash uses the median payment delay as a fixed shift so the value stays closed-form. Without a season
+    (or as_of) the clock is the calendar.
     """
     out = np.zeros(len(deals))
     for i, d in enumerate(deals):
         window = horizon - (math.exp(d["payment_delay_mu"]) if basis == "cash" else 0)
         if window > 0:
-            out[i] = d["value"] * d["p_win"] * norm.cdf((math.log(window) - d["cycle_mu"]) / d["cycle_sigma"])
+            business = float(season.ahead(as_of, window)) if season and as_of else window
+            out[i] = d["value"] * d["p_win"] * norm.cdf((math.log(business) - d["cycle_mu"]) / d["cycle_sigma"])
     return out
 
 
-def simulate(deals: list[dict], as_of: date, targets: dict, receivables: list[dict] = (), seed: int = 42) -> dict:
+def simulate(deals: list[dict], as_of: date, targets: dict, receivables: list[dict] = (), seed: int = 42,
+             season: Season | None = None) -> dict:
     """Returns {(horizon, basis): result} with the Forecast API fields (minus as_of).
 
     receivables (won, unpaid) add to cash only: they are already booked.
     """
+    season = season or Season()
     rng = np.random.default_rng(seed)
     n = len(deals)
     value = np.array([d["value"] for d in deals])
@@ -38,7 +48,7 @@ def simulate(deals: list[dict], as_of: date, targets: dict, receivables: list[di
     dsig = np.array([d["payment_delay_sigma"] for d in deals])
 
     win = rng.random((TRIALS, n)) < p
-    close_days = np.exp(mu + sig * rng.standard_normal((TRIALS, n)))
+    close_days = season.calendar(as_of, np.exp(mu + sig * rng.standard_normal((TRIALS, n))))
     cash_days = close_days + np.exp(dmu + dsig * rng.standard_normal((TRIALS, n)))
     landed = {"bookings": close_days, "cash": cash_days}
     r_value = np.array([r["value"] for r in receivables])
@@ -58,7 +68,7 @@ def simulate(deals: list[dict], as_of: date, targets: dict, receivables: list[di
                 series.append(dict(date=str(as_of + timedelta(days=day)), p10=round(q[0]), p25=round(q[1]),
                                    p50=round(q[2]), p75=round(q[3]), p90=round(q[4])))
             counts, edges = np.histogram(totals, bins=40)
-            e = expected_by_deal(deals, h, basis)
+            e = expected_by_deal(deals, h, basis, as_of, season)
             share = e / e.sum() if e.sum() else e
             damage = value * (1 - p) * (share > 0)
             target = targets.get((h, basis))

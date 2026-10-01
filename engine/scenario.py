@@ -14,6 +14,8 @@ QUIET = ("Hooli", "Soylent", "Tyrell", "Vandelay")
 
 def the_week(conn, ws: str, d1: date):
     with conn.cursor() as cur:
+        # the database logs each change below to deal_events (migration 0005), dated this week
+        cur.execute("select set_config('app.event_date', %s, true), set_config('app.event_source', 'sample', true)", (str(d1),))
         cur.execute("update deals set expected_close_date = expected_close_date + 45, push_count = push_count + 1 "
                     "where workspace_id = %s and name = 'Acme' and status = 'open'", (ws,))
         cur.execute("update deals set status = 'lost', closed_at = %s where name in ('Globex', 'Brightwater', 'Kestrel Foods') "
