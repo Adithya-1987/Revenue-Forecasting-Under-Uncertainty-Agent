@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://rangefinder-api.onrender.com/:path*" },
+    { "source": "/api/:path*", "destination": "https://revenue-forecasting-under-uncertainty.onrender.com/:path*" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
