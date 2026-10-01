@@ -63,6 +63,7 @@ const LINKS = [
   ['/app/changes', 'What changed'],
   ['/app/risk', 'Deal risk'],
   ['/app/trust', 'Trust'],
+  ['/app/manager', 'Manager'],
   ['/app/data', 'Data'],
 ]
 

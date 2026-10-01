@@ -19,7 +19,9 @@ const STEPS = [
 
 export default function LandingPage() {
   const { session } = useAuth()
-  useEffect(() => void (document.title = 'Rangefinder · Revenue forecasts as a range'), [])
+  useEffect(() => {
+    document.title = 'Rangefinder · Revenue forecasts as a range'
+  }, [])
 
   return (
     <>

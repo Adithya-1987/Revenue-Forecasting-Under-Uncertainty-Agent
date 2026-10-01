@@ -1,4 +1,7 @@
 import { useState, type ReactNode } from 'react'
+import { ImportReview, type Parsed } from '../components/ImportReview'
+import { guessMapping, parseCSV } from '../csv'
+import { autoFix } from '../tidy'
 import changes from '../mocks/changes.json'
 import forecast from '../mocks/forecast.json'
 import risk from '../mocks/risk.json'
@@ -18,12 +21,23 @@ const Section = ({ name, children, dark }: { name: string; children: ReactNode; 
   </section>
 )
 
+// A messy CRM export: Indian amounts, DD/MM dates, "Closed Won" in the stage column, odd labels.
+const MESSY = `Opp ID,Opportunity,Company,Tier,Deal Owner,Amount,Stage,Created,Close Date,Last Touch
+1,Acme renewal,Acme,Ent,Raj Sharma,5 L,Proposal Sent,25/03/2026,20/10/2026,24/09/2026
+2,Globex pilot,Globex,Mid,Meera Iyer,"₹3,00,000",Closed Won,11/08/2026,05/11/2026,28/09/2026
+3,Initech,Initech,Gold,Priya Nair,1.2 Cr,Stalled,04/03/2026,01/05/2026,10/05/2026`
+const messy = () => {
+  const [headers, ...rows] = parseCSV(MESSY)
+  return { filename: 'crm-export.csv', headers, rows, fx: autoFix(headers, rows, guessMapping(headers)) } as Parsed
+}
+
 /** Component sheet. Not linked from the nav. */
 export default function DesignPage() {
   const f = (forecast as Record<string, Forecast>)['30-bookings']
   const c = changes as Changes
   const [h, setH] = useState(30)
   const [open, setOpen] = useState<CauseType | null>('close_date')
+  const [file, setFile] = useState<Parsed>(messy)
 
   return (
     <div className="min-h-screen bg-lime px-4 py-10 text-forest sm:px-10">
@@ -68,6 +82,12 @@ export default function DesignPage() {
         <div className="rounded-card bg-white p-6">
           <Waterfall changes={c} selected={open} onSelect={setOpen} />
           <div className="mt-6 overflow-x-auto"><Ledger changes={c} expanded={open} onToggle={(t) => setOpen((o) => (o === t ? null : t))} /></div>
+        </div>
+      </Section>
+
+      <Section name="ImportReview (messy CRM export)">
+        <div className="rounded-card bg-white p-6">
+          <ImportReview file={file} setFile={setFile} aiName="Aczen Nova" onImport={() => {}} onCancel={() => setFile(messy())} />
         </div>
       </Section>
 

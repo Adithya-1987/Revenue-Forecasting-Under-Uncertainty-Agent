@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { ArrowDown } from 'lucide-react'
 import { api } from '../api/client'
 import { money, useApi, useRun } from '../lib'
@@ -7,11 +8,14 @@ import { DealRow } from '../components/DealRow'
 import { Stage } from '../components/Stage'
 import { ErrorNote, HighlightWord, PillButton, Skeleton } from '../components/ui'
 
-type SortKey = 'expected_damage' | 'value' | 'p_win'
+type SortKey = 'expected_damage' | 'value' | 'p_win' | 'slip_prob' | 'slip_period_prob' | 'days_in_stage'
 const COLS: [SortKey | null, string, string][] = [
   [null, 'Deal', 'text-left'],
   ['value', 'Value', 'text-right'],
   ['p_win', 'Chance to win', 'text-left'],
+  ['slip_prob', 'Misses its date', 'text-right'],
+  ['slip_period_prob', 'Slips to a later month', 'text-right'],
+  ['days_in_stage', 'In stage', 'text-right'],
   [null, 'Why', 'text-left'],
   ['expected_damage', 'Expected damage', 'text-right'],
 ]
@@ -31,8 +35,10 @@ const Select = ({ label, value, options, onChange }: { label: string; value: str
 export default function RiskPage() {
   const { runId } = useRun()
   const { data, error } = useApi(() => api.risk(), [runId])
-  const [rep, setRep] = useState('')
-  const [segment, setSegment] = useState('')
+  // filters can arrive in the link, e.g. from the assistant: /app/risk?rep=Raj+Sharma
+  const [params] = useSearchParams()
+  const [rep, setRep] = useState(params.get('rep') ?? '')
+  const [segment, setSegment] = useState(params.get('segment') ?? '')
   const [sort, setSort] = useState<SortKey>('expected_damage')
   const [all, setAll] = useState(false)
   const TOP = 15
@@ -40,7 +46,7 @@ export default function RiskPage() {
   const rows = useMemo(() => {
     const list = (data ?? []).filter((d) => (!rep || d.rep === rep) && (!segment || d.segment === segment))
     // p_win ascending = least likely first; money columns descending.
-    return list.sort((a, b) => (sort === 'p_win' ? a.p_win - b.p_win : b[sort] - a[sort]))
+    return list.sort((a, b) => (sort === 'p_win' ? a.p_win - b.p_win : (b[sort] ?? 0) - (a[sort] ?? 0)))
   }, [data, rep, segment, sort])
   const uniq = (k: keyof RiskDeal) => [...new Set((data ?? []).map((d) => String(d[k])))].sort()
   const top3 = rows.slice(0, 3).reduce((s, d) => s + d.expected_damage, 0)
@@ -48,7 +54,7 @@ export default function RiskPage() {
   return (
     <Stage
       title={<>Where the <HighlightWord>risk</HighlightWord> sits</>}
-      sub="Ranked by expected damage: deal value times the chance it does not close. Call from the top."
+      sub="Ranked by expected damage: deal value times the chance it does not close. Open a deal to see its stage and close-date history."
       frameLabel="Deal risk table"
       after={rows.length > 2 && <p className="text-lg">The top 3 rows carry {money(top3)} of expected damage.</p>}
     >
@@ -65,7 +71,7 @@ export default function RiskPage() {
             <p className="py-10 text-center text-sm">No deals match these filters. Set Rep or Segment back to All.</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[720px] text-sm">
+              <table className="w-full min-w-[960px] text-sm">
                 <thead>
                   <tr className="border-b border-ink text-xs text-ink/70">
                     {COLS.map(([key, name, align]) => (

@@ -25,3 +25,12 @@ test('names the row and the fix', () => {
 })
 
 test('empty file', () => assert.deepEqual(validate([]).errors, ['The file has no data rows.']))
+
+test('Indian and short amount formats', () => {
+  const v = (x) => validate([row({ value: x })]).deals[0]?.value
+  assert.equal(v('5 L'), 500000)
+  assert.equal(v('2.5 Cr'), 25000000)
+  assert.equal(v('Rs. 1,20,000'), 120000)
+  assert.equal(v('500k'), 500000)
+  assert.equal(validate([row({ value: 'five lakh' })]).errors.length, 1)
+})

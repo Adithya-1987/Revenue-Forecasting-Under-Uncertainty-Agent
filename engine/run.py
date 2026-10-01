@@ -12,10 +12,11 @@ from psycopg.types.json import Jsonb
 from engine.attribution import attribute, expected_total
 from engine.db import connect
 from engine.models import get_deal_inputs
-from engine.sim import BASES, HORIZONS, simulate
+from engine.sim import BASES, HORIZONS, expected_by_deal, simulate
 
 SNAP_COLS = ["deal_id", "name", "value", "stage", "segment", "salesperson_id", "p_win", "p_win_low", "p_win_high",
-             "calibration", "cycle_mu", "cycle_sigma", "payment_delay_days", "expected_close_date", "factors", "reasons"]
+             "calibration", "cycle_mu", "cycle_sigma", "payment_delay_days", "expected_close_date", "factors", "reasons",
+             "slip_prob", "days_in_stage", "age_days", "slip_period_prob"]
 
 
 def to_snapshot(d: dict) -> dict:
@@ -26,6 +27,8 @@ def to_snapshot(d: dict) -> dict:
         p_win_high=round(d["p_win_high"], 4), calibration=round(d["calibration"], 4), cycle_mu=round(d["cycle_mu"], 4),
         cycle_sigma=round(d["cycle_sigma"], 4), payment_delay_days=round(math.exp(d["payment_delay_mu"]), 2),
         expected_close_date=d["expected_close_date"], factors=d["factors"], reasons=d["reasons"],
+        slip_prob=round(d["slip_prob"], 4), days_in_stage=d["days_in_stage"], age_days=d["age_days"],
+        slip_period_prob=round(d["slip_period_prob"], 4),
     )
 
 
@@ -35,24 +38,52 @@ def load_snapshot(cur, run_id) -> list[dict]:
     for r in rows:
         for k in ("value", "p_win", "p_win_low", "p_win_high", "calibration", "cycle_mu", "cycle_sigma", "payment_delay_days"):
             r[k] = float(r[k])
+        for k in ("slip_prob", "slip_period_prob"):
+            r[k] = float(r[k]) if r[k] is not None else None
     return rows
+
+
+def cash_risk(inputs: list[dict], recv: list[dict], horizon: int) -> dict:
+    """Revenue at risk of late collection: booked inside the window but paid after it, plus overdue invoices."""
+    booked = expected_by_deal(inputs, horizon, "bookings")
+    collected = expected_by_deal(inputs, horizon, "cash")
+    gap = [(d["name"], float(b - c)) for d, b, c in zip(inputs, booked, collected) if b - c > 1]
+    overdue = [r for r in recv if r["days_overdue"] > 0]
+    top = sorted([dict(name=n, amount=round(a), kind="booked, paid later") for n, a in gap] +
+                 [dict(name=r["name"], amount=round(r["value"]), kind=f"invoice {r['days_overdue']} days overdue") for r in overdue],
+                 key=lambda x: -x["amount"])[:6]
+    return dict(booked_paid_later=round(sum(a for _, a in gap)), overdue_receivables=round(sum(r["value"] for r in overdue)),
+                overdue_count=len(overdue), top=top)
+
+
+def concentration(inputs: list[dict], horizon: int, basis: str) -> dict:
+    """How lumpy the window is: HHI, the equivalent number of equal deals, and what losing the biggest one costs."""
+    e = expected_by_deal(inputs, horizon, basis)
+    total = float(e.sum())
+    if total <= 0:
+        return dict(hhi=None, effective_deals=None, largest=None)
+    share = e / total
+    hhi = float((share ** 2).sum())
+    i = int(e.argmax())
+    return dict(hhi=round(hhi, 4), effective_deals=round(1 / hhi, 1),
+                largest=dict(name=inputs[i]["name"], expected=round(float(e[i])), share=round(float(share[i]), 4)))
 
 
 def main(as_of: date, ws: str) -> str:
     with connect() as conn, conn.cursor() as cur:
-        inputs, recv, _ = get_deal_inputs(conn, ws, as_of)
+        inputs, recv, model = get_deal_inputs(conn, ws, as_of)
         if not inputs:
             raise SystemExit("No open deals to forecast. Upload a CSV with open deals, or use sample data.")
         snap = [to_snapshot(d) for d in inputs]
 
         cur.execute("select horizon_days, basis, amount from targets where workspace_id = %s", (ws,))
         targets = {(h, b): float(a) for h, b, a in cur.fetchall()}
-        results = simulate(inputs, as_of, targets, recv)
+        results = simulate(inputs, as_of, targets, recv, season=model["season"])
         if not targets:  # first run ever sets targets 10% above the median, rounded to 50k
             for (h, b), r in results.items():
                 targets[(h, b)] = round(r["p50"] * 1.1 / 50_000) * 50_000
                 cur.execute("insert into targets (workspace_id, horizon_days, basis, amount) values (%s, %s, %s, %s)", (ws, h, b, targets[(h, b)]))
-            results = simulate(inputs, as_of, targets, recv)
+            results = simulate(inputs, as_of, targets, recv, season=model["season"])
 
         cur.execute("select id, as_of from forecast_runs where workspace_id = %s order by run_at desc limit 1", (ws,))
         prev = cur.fetchone()
@@ -62,11 +93,11 @@ def main(as_of: date, ws: str) -> str:
         for (h, b), r in results.items():
             cur.execute(
                 "insert into forecast_results (run_id, horizon_days, basis, p10, p50, p90, mean, expected, target, "
-                "prob_hit_target, top3_share, hhi, top_deal, series, histogram, top_deals) "
-                "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                "prob_hit_target, top3_share, hhi, top_deal, series, histogram, top_deals, cash_risk, concentration) "
+                "values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                 (run_id, h, b, r["p10"], r["p50"], r["p90"], r["mean"], round(expected_total(snap, as_of, h, b)),
                  r["target"], r["prob_hit_target"], r["top3_share"], r["hhi"], r["top_deal"],
-                 Jsonb(r["series"]), Jsonb(r["histogram"]), Jsonb(r["top_deals"])),
+                 Jsonb(r["series"]), Jsonb(r["histogram"]), Jsonb(r["top_deals"]), Jsonb(cash_risk(inputs, recv, h)), Jsonb(concentration(inputs, h, b))),
             )
         with cur.copy(f"copy forecast_deal_snapshots (run_id, {', '.join(SNAP_COLS)}) from stdin") as cp:
             for s in snap:

@@ -36,7 +36,7 @@ export const HighlightWord = ({ children }: { children: ReactNode }) => (
 )
 
 export const ReasonChip = ({ children }: { children: ReactNode }) => (
-  <span className="inline-block whitespace-nowrap rounded-full bg-[#eef3e8] px-2 py-0.5 text-xs text-forest">
+  <span className="inline-block rounded-full bg-[#eef3e8] px-2 py-0.5 text-xs text-forest">
     {children}
   </span>
 )

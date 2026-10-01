@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { Component, type ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './auth'
 import { RunProvider } from './lib'
@@ -12,6 +12,7 @@ import ChangesPage from './pages/Changes'
 import RiskPage from './pages/Risk'
 import TrustPage from './pages/Trust'
 import DataPage from './pages/Data'
+import ManagerPage from './pages/Manager'
 import DesignPage from './pages/Design'
 
 function Waiting({ error, retry }: { error?: string; retry?: () => void }) {
@@ -45,6 +46,29 @@ function Guard({ children, needWorkspace = true }: { children: ReactNode; needWo
   return <>{children}</>
 }
 
+/** A crash in one screen shows a way back instead of a blank page. */
+class ErrorBoundary extends Component<{ children: ReactNode }, { error?: Error }> {
+  state: { error?: Error } = {}
+  static getDerivedStateFromError(error: Error) {
+    return { error }
+  }
+  componentDidCatch(error: Error) {
+    console.error('[rangefinder] screen crashed:', error)
+  }
+  render() {
+    if (!this.state.error) return this.props.children
+    return (
+      <div role="alert" className="grid min-h-screen place-items-center bg-lime px-4 text-center text-forest">
+        <div className="max-w-md space-y-3">
+          <p className="font-head text-xl font-bold uppercase">This screen hit a problem</p>
+          <p className="text-sm">{this.state.error.message}. Your data is safe. Reload to carry on.</p>
+          <button type="button" className="btn-lift" onClick={() => location.reload()}>Reload the page</button>
+        </div>
+      </div>
+    )
+  }
+}
+
 const app = (el: ReactNode) => <Guard>{el}</Guard>
 
 function Intro() {
@@ -57,6 +81,7 @@ export default function App() {
     <AuthProvider>
       <RunProvider>
         <Intro />
+        <ErrorBoundary>
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
@@ -67,9 +92,11 @@ export default function App() {
           <Route path="/app/risk" element={app(<RiskPage />)} />
           <Route path="/app/trust" element={app(<TrustPage />)} />
           <Route path="/app/data" element={app(<DataPage />)} />
+          <Route path="/app/manager" element={app(<ManagerPage />)} />
           <Route path="/design" element={<DesignPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </ErrorBoundary>
       </RunProvider>
     </AuthProvider>
   )

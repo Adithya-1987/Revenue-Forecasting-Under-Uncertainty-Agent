@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '../api/client'
 import { money, pct, shortDate, useApi, useRun } from '../lib'
 import type { Basis, Forecast, Horizon } from '../types'
@@ -36,6 +37,43 @@ function RunCompare({ f }: { f: Forecast }) {
   )
 }
 
+/** Signed is not cash: what lands in the window as bookings but pays after it, plus invoices already late. */
+function CashRiskPanel({ f }: { f: Forecast }) {
+  const c = f.cash_risk
+  if (!c) return null
+  return (
+    <section aria-labelledby="cash-risk" className="mt-8 border-t border-hair pt-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 id="cash-risk" className="font-head text-lg font-bold">Revenue at risk of late collection</h2>
+        <p className="text-xs text-ink/70">Next {f.horizon} days · from each customer's payment terms and payment history</p>
+      </div>
+      <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr_1.4fr]">
+        <div>
+          <p className="text-xs text-ink/70">Booked in the window, paid after it</p>
+          <p className="mt-1 font-head text-xl font-bold">{money(c.booked_paid_later)}</p>
+          <p className="mt-1 text-xs text-ink/70">expected value</p>
+        </div>
+        <div>
+          <p className="text-xs text-ink/70">Invoices already overdue</p>
+          <p className={`mt-1 font-head text-xl font-bold ${c.overdue_count ? 'text-loss' : ''}`}>{money(c.overdue_receivables)}</p>
+          <p className="mt-1 text-xs text-ink/70">{c.overdue_count} unpaid past their terms</p>
+        </div>
+        <ul className="divide-y divide-hair text-sm">
+          {c.top.slice(0, 4).map((t) => (
+            <li key={t.name + t.kind} className="flex items-baseline justify-between gap-3 py-2">
+              <span className="min-w-0">
+                <span className="block truncate font-medium">{t.name}</span>
+                <span className={`text-xs ${t.kind.includes('overdue') ? 'text-loss' : 'text-ink/70'}`}>{t.kind}</span>
+              </span>
+              <span className="shrink-0">{money(t.amount)}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  )
+}
+
 /** Where the expected revenue is concentrated: named deals, share bars from zero. */
 function TopDeals({ f }: { f: Forecast }) {
   const deals = f.top_deals ?? []
@@ -46,6 +84,12 @@ function TopDeals({ f }: { f: Forecast }) {
       <h2 className="text-lg">
         Top 3 deals carry <strong className="font-head">{pct(f.top3_share)}</strong> of expected revenue
       </h2>
+      {f.concentration?.largest && f.concentration.effective_deals && (
+        <p className="mt-1 text-sm text-white/90">
+          Spread like {Math.round(f.concentration.effective_deals)} equal-sized deals. If {f.concentration.largest.name} slips out of the window,
+          the expected figure falls {pct(f.concentration.largest.share)} ({money(f.concentration.largest.expected)}).
+        </p>
+      )}
       <ul className="mt-4 space-y-2.5">
         {deals.map((d) => (
           <li key={d.name} className="grid grid-cols-[minmax(0,160px)_1fr_48px] items-center gap-3 text-sm">
@@ -62,8 +106,9 @@ function TopDeals({ f }: { f: Forecast }) {
 }
 
 export default function ForecastPage() {
-  const [horizon, setHorizon] = useState<Horizon>(30)
-  const [basis, setBasis] = useState<Basis>('bookings')
+  const [params] = useSearchParams()
+  const [horizon, setHorizon] = useState<Horizon>(([30, 60, 90].includes(Number(params.get('horizon'))) ? Number(params.get('horizon')) : 30) as Horizon)
+  const [basis, setBasis] = useState<Basis>(params.get('basis') === 'cash' ? 'cash' : 'bookings')
   const { runId } = useRun()
   const { data: f, error } = useApi(() => api.forecast(horizon, basis), [horizon, basis, runId])
   const gap = f ? f.p50 - f.target : 0
@@ -134,6 +179,7 @@ export default function ForecastPage() {
             </figcaption>
             <FanLanding f={f} />
           </figure>
+          <CashRiskPanel f={f} />
         </>
       )}
     </Stage>

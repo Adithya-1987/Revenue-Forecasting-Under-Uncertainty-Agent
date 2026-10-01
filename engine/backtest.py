@@ -20,7 +20,8 @@ def as_seen_at(d: dict, t: date) -> dict:
     return dict(d, last_activity_date=t - ((d["closed_at"] - OBS_LAG) - d["last_activity_date"]))
 
 
-def report(deals: list[dict], as_of: date, points: int = 12) -> dict:
+def report(deals: list[dict], as_of: date, points: int = 12, commits: list[tuple] = ()) -> dict:
+    """commits: (rep_id, period_start, period_end, committed) rows, when the reps' own forecasts are known."""
     closed = [d for d in deals if d["status"] != "open" and d["closed_at"] <= as_of]
     rows, errs, naive_errs = [], {30: [], 60: [], 90: []}, []
     for k in range(points, 0, -1):
@@ -29,7 +30,8 @@ def report(deals: list[dict], as_of: date, points: int = 12) -> dict:
         open_t = [as_seen_at(d, t) for d in closed if d["created_at"] <= t < d["closed_at"]]
         if len(known) < 200 or not open_t:
             continue
-        res = simulate(deal_inputs(fit(known, bootstrap=0), open_t, t), t, {})
+        m = fit(known, bootstrap=20)  # same uncertainty bands as a live run, so coverage is measured fairly
+        res = simulate(deal_inputs(m, open_t, t), t, {}, season=m["season"])
         for h in (30, 60, 90):
             actual = sum(d["value"] for d in open_t if d["status"] == "won" and d["closed_at"] <= t + timedelta(days=h))
             if actual:
@@ -41,30 +43,49 @@ def report(deals: list[dict], as_of: date, points: int = 12) -> dict:
             naive_errs.append(abs(naive - actual30) / actual30)
         rows.append(dict(run_at=f"{t:%Y-%m}", predicted=r["p50"], actual=round(actual30), p10=r["p10"], p90=r["p90"]))
 
-    # Rep scoreboard: "committed" = what a neutral rep would have closed on the same deals (the model),
-    # score = the shrunk calibration factor the forecast actually applies.
+    # Rep scoreboard. With the reps' own commits: committed = what they promised for each month, actual = what
+    # they closed in it, score = actual / committed. Without commits: committed = what a neutral rep would have
+    # closed on the same deals (the model). Either way `correction` is the factor the forecast applies.
     full = fit(closed, bootstrap=0)
+    label = lambda x: "optimist" if x < 0.9 else "sandbagger" if x > 1.1 else "calibrated"  # noqa: E731
     reps = []
     for rep in sorted({d["salesperson_id"] for d in closed}):
         mine = [i for i, d in enumerate(closed) if d["salesperson_id"] == rep]
-        committed = sum(closed[i]["value"] * full["p_hist"][i] for i in mine)
-        actual = sum(closed[i]["value"] for i in mine if closed[i]["status"] == "won")
-        score = full["cal"][rep]
-        reps.append(dict(id=rep, committed=round(committed), actual=round(actual), score=round(score, 2),
-                         label="optimist" if score < 0.9 else "sandbagger" if score > 1.1 else "calibrated"))
+        own = [c for c in commits if c[0] == rep and c[2] <= as_of]
+        if own:
+            committed = sum(float(c[3]) for c in own)
+            actual = sum(closed[i]["value"] for i in mine if closed[i]["status"] == "won"
+                         and any(c[1] <= closed[i]["closed_at"] <= c[2] for c in own))
+        else:
+            committed = sum(closed[i]["value"] * full["p_hist"][i] for i in mine)
+            actual = sum(closed[i]["value"] for i in mine if closed[i]["status"] == "won")
+        score = actual / committed if committed else 1.0
+        reps.append(dict(id=rep, team=closed[mine[0]]["team"], committed=round(committed), actual=round(actual),
+                         score=round(score, 2), label=label(score), correction=round(full["cal"][rep], 2),
+                         basis="commits" if own else "model", periods=len(own)))
+
+    # teams: the same comparison summed over each team's reps
+    teams = []
+    for team in sorted({r["team"] for r in reps}):
+        rs = [r for r in reps if r["team"] == team]
+        committed, actual = sum(r["committed"] for r in rs), sum(r["actual"] for r in rs)
+        score = actual / committed if committed else 1.0
+        teams.append(dict(team=team, reps=len(rs), committed=committed, actual=actual, score=round(score, 2), label=label(score)))
 
     return dict(
         mape={str(h): round(float(np.mean(np.abs(e))), 4) if e else None for h, e in errs.items()},
         bias=round(float(np.mean(errs[30])), 4) if errs[30] else 0,
         coverage=round(float(np.mean([r["p10"] <= r["actual"] <= r["p90"] for r in rows])), 4) if rows else None,
         baseline_mape=round(float(np.mean(naive_errs)), 4) if naive_errs else None,
-        history=rows, reps=reps,
+        history=rows, reps=reps, teams=teams, lost_patterns=full["lost"],
+        seasonality={str(m): round(v, 3) for m, v in full["season"].items()},
     )
 
 
 def main(as_of: date, ws: str):
     with connect() as conn, conn.cursor() as cur:
-        rep = report(load_deals(conn, ws), as_of)
+        cur.execute("select salesperson_id, period_start, period_end, committed from rep_forecasts where workspace_id = %s", (ws,))
+        rep = report(load_deals(conn, ws), as_of, commits=cur.fetchall())
         cur.execute("select id, name from salespeople where workspace_id = %s", (ws,))
         names = dict(cur.fetchall())
         for r in rep["reps"]:

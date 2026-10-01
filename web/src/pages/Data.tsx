@@ -3,16 +3,17 @@ import { useNavigate } from 'react-router-dom'
 import { CheckCircle2, FileUp, Sparkles } from 'lucide-react'
 import { api, ApiError, type ImportResult, type Target } from '../api/client'
 import { useAuth } from '../auth'
-import { applyMapping, downloadTemplate, guessMapping, OPTIONAL, parseCSV, REQUIRED, type Column } from '../csv'
+import { downloadTemplate, guessMapping, OPTIONAL, parseCSV, REQUIRED } from '../csv'
+import { autoFix } from '../tidy'
+import { ImportReview, type Parsed } from '../components/ImportReview'
+import { NovaSync } from '../components/NovaSync'
 import { money, useApi, useRun } from '../lib'
 import { PillTabs } from '../components/PillNav'
 import { Stage } from '../components/Stage'
 import { ErrorNote, HighlightWord, PillButton, Skeleton } from '../components/ui'
 
 type Tab = 'upload' | 'history' | 'targets'
-type Parsed = { filename: string; headers: string[]; rows: string[][]; map: Partial<Record<Column, string>> }
 
-const PREVIEW: Column[] = ['deal_id', 'deal_name', 'account', 'value', 'stage', 'status', 'expected_close_date']
 const input = 'w-full rounded-xl border border-forest/20 bg-white px-3 py-2.5 text-sm outline-none focus:border-forest'
 
 function Upload() {
@@ -35,24 +36,22 @@ function Upload() {
     if (f.size > 10_000_000) return setError({ message: `${f.name} is ${(f.size / 1e6).toFixed(1)} MB. The limit is 10 MB.` })
     const [headers, ...rows] = parseCSV(await f.text())
     if (!headers || !rows.length) return setError({ message: `${f.name} has no data rows. Export it again with a header row and at least one deal.` })
-    setFile({ filename: f.name, headers, rows, map: guessMapping(headers) })
+    setFile({ filename: f.name, headers, rows, fx: autoFix(headers, rows, guessMapping(headers)) })
   }
 
-  const missing = file ? REQUIRED.filter((c) => !file.map[c]) : []
-  const mapped = file ? applyMapping(file.headers, file.rows, file.map) : []
-  const count = (s: string) => mapped.filter((r) => r.status?.toLowerCase() === s).length
+  const { data: ai } = useApi(() => api.ai().catch(() => ({ provider: null, name: null })), [])
 
   const finish = async () => {
     await refresh()
     bump()
   }
 
-  const doImport = async () => {
+  const doImport = async (rows: Record<string, string>[]) => {
     if (!file) return
     setPhase('importing')
     setError(undefined)
     try {
-      const r = await api.importRows(file.filename, mapped)
+      const r = await api.importRows(file.filename, rows)
       setResult(r)
       setPhase('done')
       await finish()
@@ -62,11 +61,12 @@ function Upload() {
     }
   }
 
-  const doSample = async () => {
+  const { data: nova } = useApi(() => api.nova().catch(() => ({ available: true, server_key: false })), [])
+  const doSample = async (kind?: 'aczen') => {
     setPhase('sample')
     setError(undefined)
     try {
-      await api.loadSample()
+      await api.loadSample(kind)
       await finish()
       navigate('/app')
     } catch (e) {
@@ -80,7 +80,7 @@ function Upload() {
       <div role="status" className="grid min-h-[320px] place-items-center text-center">
         <div>
           <span aria-hidden className="mx-auto mb-4 block size-10 animate-spin rounded-full border-4 border-hair border-t-forest motion-reduce:animate-none" />
-          <p className="font-head text-lg font-bold">{phase === 'sample' ? 'Building the sample company' : `Importing ${mapped.length.toLocaleString('en-US')} deals`}</p>
+          <p className="font-head text-lg font-bold">{phase === 'sample' ? 'Building the sample company' : `Importing ${(file?.rows.length ?? 0).toLocaleString('en-US')} deals`}</p>
           <p className="mt-1 max-w-[46ch] text-sm text-ink/70">
             Saving deals, learning from closed history, then simulating 10,000 futures. This takes about 15 seconds.
           </p>
@@ -125,6 +125,7 @@ function Upload() {
         </div>
       )}
 
+      {!file && <NovaSync onDone={async () => (await finish(), navigate('/app'))} />}
       {!file ? (
         <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
           <label className="group flex min-h-[240px] cursor-pointer flex-col items-center justify-center rounded-card border-2 border-dashed border-forest/25 bg-lime/15 p-6 text-center transition-colors hover:border-forest/50 hover:bg-lime/30 focus-within:border-forest">
@@ -142,20 +143,29 @@ function Upload() {
               <h2 className="font-head text-lg font-bold">No file yet?</h2>
               <p className="mt-1 text-sm text-ink/70">
                 Load a sample company: two years of history, 150 open deals and a week of changes, so every screen has a story.
+                {nova?.server_key && ' Or the Aczen demo: the same simulated history built on your real Aczen clients, reps and payment terms, with monthly rep commits.'}
               </p>
             </div>
             {confirmSample ? (
               <div className="mt-4 space-y-3">
                 <p className="text-sm text-loss">This replaces all {deals.toLocaleString('en-US')} deals and forecasts in this workspace.</p>
                 <div className="flex flex-wrap gap-2">
-                  <PillButton onClick={doSample} icon={false}>Replace with sample</PillButton>
+                  <PillButton onClick={() => doSample()} icon={false}>Replace with sample</PillButton>
+                  {nova?.server_key && <PillButton onClick={() => doSample('aczen')} icon={false}>Replace with Aczen demo</PillButton>}
                   <PillButton variant="secondary" icon={false} onClick={() => setConfirmSample(false)}>Keep my data</PillButton>
                 </div>
               </div>
             ) : (
-              <PillButton variant="secondary" className="mt-4 self-start" onClick={() => (deals ? setConfirmSample(true) : doSample())}>
-                Load sample company
-              </PillButton>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <PillButton variant="secondary" onClick={() => (deals ? setConfirmSample(true) : doSample())}>
+                  Load sample company
+                </PillButton>
+                {nova?.server_key && (
+                  <PillButton variant="secondary" onClick={() => (deals ? setConfirmSample(true) : doSample('aczen'))}>
+                    Load Aczen demo
+                  </PillButton>
+                )}
+              </div>
             )}
           </div>
           <p className="text-sm text-ink/70 lg:col-span-2">
@@ -166,66 +176,7 @@ function Upload() {
           </p>
         </div>
       ) : (
-        <div className="space-y-6">
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="font-head text-lg font-bold">{file.filename}</h2>
-            <p className="text-sm text-ink/70">
-              {mapped.length.toLocaleString('en-US')} rows · {count('open')} open · {count('won')} won · {count('lost')} lost
-            </p>
-          </div>
-
-          <fieldset>
-            <legend className="mb-2 text-sm font-medium">Match your columns</legend>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {[...REQUIRED, ...OPTIONAL].map((col) => {
-                const need = (REQUIRED as readonly string[]).includes(col)
-                return (
-                  <label key={col} className="flex items-center justify-between gap-2 rounded-lg border border-hair px-3 py-2 text-sm">
-                    <span>
-                      {file.map[col] ? <span className="text-gain">✓ </span> : need ? <span className="text-loss">! </span> : null}
-                      {col}
-                      {!need && <span className="text-xs text-ink/60"> optional</span>}
-                    </span>
-                    <select
-                      value={file.map[col] ?? ''}
-                      onChange={(e) => setFile({ ...file, map: { ...file.map, [col]: e.target.value || undefined } })}
-                      className="max-w-[55%] truncate rounded-md border border-forest/20 bg-white px-2 py-1 text-xs"
-                    >
-                      <option value="">Not in file</option>
-                      {file.headers.map((h) => <option key={h}>{h}</option>)}
-                    </select>
-                  </label>
-                )
-              })}
-            </div>
-          </fieldset>
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-sm">
-              <caption className="mb-2 text-left text-sm font-medium">First rows, as we read them</caption>
-              <thead>
-                <tr className="border-b border-ink text-left text-xs text-ink/70">
-                  {PREVIEW.map((c) => <th key={c} scope="col" className="py-2 pr-3 font-normal">{c}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {mapped.slice(0, 6).map((r, i) => (
-                  <tr key={i} className="border-b border-hair last:border-0">
-                    {PREVIEW.map((c) => <td key={c} className="max-w-[180px] truncate py-2 pr-3">{r[c] || <span className="text-loss">empty</span>}</td>)}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <PillButton onClick={doImport} disabled={missing.length > 0}>
-              Import {mapped.length.toLocaleString('en-US')} deals and run forecast
-            </PillButton>
-            <PillButton variant="secondary" icon={false} onClick={() => setFile(undefined)}>Choose another file</PillButton>
-            {missing.length > 0 && <p className="text-sm text-loss">Match {missing.join(', ')} before importing.</p>}
-          </div>
-        </div>
+        <ImportReview file={file} setFile={setFile} aiName={ai?.name ?? null} onImport={doImport} onCancel={() => setFile(undefined)} />
       )}
     </div>
   )
@@ -251,7 +202,7 @@ function History() {
           {data.map((r) => (
             <tr key={r.id} className="border-b border-hair last:border-0">
               <td className="py-2.5 pr-4">{new Date(r.uploaded_at).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
-              <td className="py-2.5 pr-4">{r.source === 'sample' ? 'Sample company' : r.filename}</td>
+              <td className="py-2.5 pr-4">{r.source === 'sample' ? 'Sample company' : r.source === 'nova' ? 'Aczen Nova sync' : r.filename}</td>
               {[r.rows, r.created, r.updated, r.missing].map((n, i) => <td key={i} className="py-2.5 pr-4 text-right">{n.toLocaleString('en-US')}</td>)}
             </tr>
           ))}

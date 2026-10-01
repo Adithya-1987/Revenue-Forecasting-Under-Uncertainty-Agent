@@ -3,14 +3,22 @@
 
 export const COLUMNS = {
   required: ['deal_id', 'deal_name', 'account', 'segment', 'rep', 'value', 'stage', 'status', 'created_at', 'expected_close_date', 'last_activity_date'],
-  optional: ['closed_at', 'paid_at', 'date_pushes'],
+  optional: ['closed_at', 'paid_at', 'date_pushes', 'team', 'payment_terms_days'],
 }
 const SEGMENTS = { smb: 'SMB', 'mid-market': 'Mid-Market', 'mid market': 'Mid-Market', midmarket: 'Mid-Market', mid: 'Mid-Market', enterprise: 'Enterprise' }
 const STAGES = { qualify: 'Qualify', demo: 'Demo', proposal: 'Proposal', negotiation: 'Negotiation', closed: 'Closed' }
 const STATUSES = new Set(['open', 'won', 'lost'])
 const MAX_ROWS = 20_000
 
-const slug = (s) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'x'
+export const slug = (s) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'x'
+const AMOUNT_UNITS = { k: 1e3, l: 1e5, lakh: 1e5, lakhs: 1e5, lac: 1e5, m: 1e6, mn: 1e6, cr: 1e7, crore: 1e7, crores: 1e7 }
+/** "₹5,00,000", "5 L", "2.5 Cr", "500k", "1.2M" -> rupees. NaN when it is not an amount. */
+export function parseAmount(raw) {
+  const m = String(raw).trim().toLowerCase().replace(/^(₹|rs\.?|inr)\s*/, '').replace(/,/g, '').match(/^(\d+(?:\.\d+)?)\s*([a-z]*)$/)
+  if (!m) return NaN
+  const unit = m[2] ? AMOUNT_UNITS[m[2]] : 1
+  return unit ? Number(m[1]) * unit : NaN
+}
 const isDate = (s) => /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s))
 
 /** Returns { deals, errors }. Errors name the row (1-based, after the header) and the fix. */
@@ -31,7 +39,7 @@ export function validate(rows) {
     const segment = SEGMENTS[get('segment').toLowerCase()]
     const stage = STAGES[get('stage').toLowerCase()]
     const status = get('status').toLowerCase()
-    const value = Number(get('value').replace(/[₹,\s]/g, ''))
+    const value = parseAmount(get('value'))
     const dates = ['created_at', 'expected_close_date', 'last_activity_date', 'closed_at', 'paid_at']
     const bad = dates.filter((k) => get(k) && !isDate(get(k)))
     if (!segment) return errors.push(`${at}: segment "${get('segment')}" must be SMB, Mid-Market or Enterprise.`)
@@ -43,11 +51,14 @@ export function validate(rows) {
     if (status === 'open' && stage === 'Closed') return errors.push(`${at}: an open deal cannot be at stage Closed.`)
     const pushes = get('date_pushes') ? Number(get('date_pushes')) : null
     if (pushes != null && !(Number.isInteger(pushes) && pushes >= 0)) return errors.push(`${at}: date_pushes must be a whole number.`)
+    const terms = get('payment_terms_days') ? Number(get('payment_terms_days')) : null
+    if (terms != null && !(Number.isInteger(terms) && terms >= 0 && terms <= 365)) return errors.push(`${at}: payment_terms_days must be a whole number of days (0-365).`)
     deals.push({
       id: id.slice(0, 80), name: get('deal_name').slice(0, 120), account: get('account').slice(0, 120), segment,
       rep: get('rep').slice(0, 80), value, stage, status, created_at: get('created_at'),
       expected_close_date: get('expected_close_date'), last_activity_date: get('last_activity_date'),
       closed_at: get('closed_at') || null, paid_at: get('paid_at') || null, pushes,
+      team: get('team').slice(0, 60) || null, terms,
     })
   })
   return { deals, errors: errors.slice(0, 20).concat(errors.length > 20 ? [`…and ${errors.length - 20} more.`] : []) }
@@ -55,21 +66,24 @@ export function validate(rows) {
 
 /** Upserts one validated file. Returns counts; deals open in the database but absent from the file are left alone. */
 export async function upsert(client, ws, deals) {
-  const reps = [...new Map(deals.map((d) => [slug(d.rep), d.rep])).entries()]
+  const reps = [...new Map(deals.map((d) => [slug(d.rep), d])).entries()]
   await client.query(
-    `insert into salespeople (workspace_id, id, name) select $1, * from unnest($2::text[], $3::text[])
-     on conflict (workspace_id, id) do update set name = excluded.name`,
-    [ws, reps.map((r) => 'rep-' + r[0]), reps.map((r) => r[1])],
+    `insert into salespeople (workspace_id, id, name, team) select $1, * from unnest($2::text[], $3::text[], $4::text[])
+     on conflict (workspace_id, id) do update set name = excluded.name, team = coalesce(excluded.team, salespeople.team)`,
+    [ws, reps.map((r) => 'rep-' + r[0]), reps.map((r) => r[1].rep), reps.map((r) => r[1].team)],
   )
   const accounts = [...new Map(deals.map((d) => [slug(d.account), d])).entries()]
   await client.query(
-    `insert into customers (workspace_id, id, name, segment) select $1, * from unnest($2::text[], $3::text[], $4::text[])
-     on conflict (workspace_id, id) do update set name = excluded.name, segment = excluded.segment`,
-    [ws, accounts.map((a) => 'acc-' + a[0]), accounts.map((a) => a[1].account), accounts.map((a) => a[1].segment)],
+    `insert into customers (workspace_id, id, name, segment, payment_terms_days)
+       select $1, a, b, c, coalesce(t, 30) from unnest($2::text[], $3::text[], $4::text[], $5::int[]) as x(a, b, c, t)
+     on conflict (workspace_id, id) do update set name = excluded.name, segment = excluded.segment,
+       payment_terms_days = case when $6 then excluded.payment_terms_days else customers.payment_terms_days end`,
+    [ws, accounts.map((a) => 'acc-' + a[0]), accounts.map((a) => a[1].account), accounts.map((a) => a[1].segment),
+      accounts.map((a) => a[1].terms), deals.some((d) => d.terms != null)],
   )
 
   const existing = new Map(
-    (await client.query('select id, expected_close_date, push_count, status from deals where workspace_id = $1', [ws])).rows.map((r) => [r.id, r]),
+    (await client.query('select id, stage, expected_close_date, push_count, status from deals where workspace_id = $1', [ws])).rows.map((r) => [r.id, r]),
   )
   const push = deals.map((d) => {
     const old = existing.get(d.id)
@@ -92,8 +106,35 @@ export async function upsert(client, ws, deals) {
       col('value'), col('stage'), col('status'), col('created_at'), col('expected_close_date'), col('last_activity_date'),
       push, col('closed_at'), col('paid_at')],
   )
+  // event log: what this upload changed (first sight of a deal starts its stage history)
+  const today = new Date().toISOString().slice(0, 10)
+  const stageEv = deals.flatMap((d) => {
+    const old = existing.get(d.id)
+    const to = d.status === 'open' ? d.stage : 'Closed'
+    if (!old) return [[d.id, null, d.stage, d.created_at], ...(d.status !== 'open' ? [[d.id, d.stage, 'Closed', d.closed_at]] : [])]
+    const from = old.status === 'open' ? old.stage : 'Closed'
+    return from !== to ? [[d.id, from, to, d.status !== 'open' && d.closed_at ? d.closed_at : today]] : []
+  })
+  const closeEv = deals
+    .filter((d) => existing.has(d.id) && d.status === 'open' && existing.get(d.id).expected_close_date !== d.expected_close_date)
+    .map((d) => [d.id, existing.get(d.id).expected_close_date, d.expected_close_date, today])
+  const cols = (rows, i) => rows.map((r) => r[i])
+  if (stageEv.length)
+    await client.query(
+      `insert into stage_events (workspace_id, deal_id, from_stage, to_stage, changed_at)
+       select $1, * from unnest($2::text[], $3::text[], $4::text[], $5::date[])`,
+      [ws, cols(stageEv, 0), cols(stageEv, 1), cols(stageEv, 2), cols(stageEv, 3)],
+    )
+  if (closeEv.length)
+    await client.query(
+      `insert into closedate_events (workspace_id, deal_id, old_date, new_date, changed_at)
+       select $1, * from unnest($2::text[], $3::date[], $4::date[], $5::date[])`,
+      [ws, cols(closeEv, 0), cols(closeEv, 1), cols(closeEv, 2), cols(closeEv, 3)],
+    )
+
   const inFile = new Set(deals.map((d) => d.id))
   return {
+    stage_changes: stageEv.length, close_date_changes: closeEv.length,
     created: deals.filter((d) => !existing.has(d.id)).length,
     updated: deals.filter((d) => existing.has(d.id)).length,
     missing: [...existing.values()].filter((r) => r.status === 'open' && !inFile.has(r.id)).length,
