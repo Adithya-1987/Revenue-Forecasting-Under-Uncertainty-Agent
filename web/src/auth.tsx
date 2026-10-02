@@ -89,7 +89,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data } = await supabase.auth.getSession()
     if (!data.session) return setMe(null)
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL ?? '/api'}/me`, { headers: { authorization: `Bearer ${data.session.access_token}` } })
+      // Render free tier sleeps when idle; the proxy 502s/504s until it wakes (~1 min), so retry.
+      let res = await fetch(`${import.meta.env.VITE_API_URL ?? '/api'}/me`, { headers: { authorization: `Bearer ${data.session.access_token}` } })
+      for (let i = 0; i < 8 && [502, 503, 504].includes(res.status); i++) {
+        await new Promise((r) => setTimeout(r, 8000))
+        res = await fetch(`${import.meta.env.VITE_API_URL ?? '/api'}/me`, { headers: { authorization: `Bearer ${data.session.access_token}` } })
+      }
       const body = await res.json().catch(() => null)
       setMe(res.ok ? body : null)
       setError(res.ok ? undefined : body?.error ?? `The API returned ${res.status}.`)
