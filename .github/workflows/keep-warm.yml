@@ -1,10 +1,11 @@
 # Render free tier sleeps after 15 min idle. Ping /health so the API stays awake.
 # Every 10 min, not 14: GitHub often starts scheduled runs several minutes late.
+# Off-peak minutes (:03, :13...): GitHub drops many runs scheduled on :00/:10.
 name: Keep Render warm
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '3-59/10 * * * *'
   workflow_dispatch:
 
 jobs:
