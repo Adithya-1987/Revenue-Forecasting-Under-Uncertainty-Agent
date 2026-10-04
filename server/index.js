@@ -200,12 +200,13 @@ app.post('/workspaces', route(async ({ req, user }) => {
 }, { noWorkspace: true }))
 
 // ---- routes: data in -------------------------------------------------------------------------------
-const novaAllowed = (wsId) => !!process.env.NOVA_API_KEY && (process.env.NOVA_WORKSPACES ?? '').split(',').map((x) => x.trim()).includes(wsId)
+// every workspace may use the server's Nova key (it reads Aczen's real records; deliberate for the shared demo)
+const novaAllowed = () => !!process.env.NOVA_API_KEY
 
 app.post('/workspaces/sample', route(async ({ req, user, ws }) => {
   // "aczen": two years of simulated history on the real Aczen clients, reps and terms (needs this workspace's Nova access)
   const aczen = req.body?.kind === 'aczen'
-  if (aczen && !novaAllowed(ws.id)) throw new HttpError(403, 'The Aczen demo needs this workspace to have Aczen Nova access (NOVA_WORKSPACES).')
+  if (aczen && !novaAllowed(ws.id)) throw new HttpError(403, 'The Aczen demo needs this workspace to have Aczen Nova access (NOVA_API_KEY is not set).')
   await engine(ws.id, ['-m', 'engine.scenario', ws.id, ...(aczen ? ['--aczen'] : [])])
   const [{ n }] = await q('select count(*)::int as n from deals where workspace_id = $1', [ws.id])
   await q("insert into imports (workspace_id, uploaded_by, source, filename, rows, created) values ($1, $2, 'sample', $3, $4, $4)",
@@ -241,8 +242,8 @@ app.post('/imports', route(async ({ req, user, ws }) => {
   }
 }))
 
-// Aczen Nova sync. The server's key works only for workspaces in NOVA_WORKSPACES; anyone else pastes their
-// own key, which is used for this request and never stored.
+// Aczen Nova sync. Uses the server's key when set; otherwise the user pastes their own key, which is used
+// for this request and never stored.
 app.get('/integrations/nova', route(({ ws }) => ({
   available: true,
   server_key: novaAllowed(ws.id),
@@ -250,8 +251,7 @@ app.get('/integrations/nova', route(({ ws }) => ({
 
 app.post('/integrations/nova/sync', route(async ({ req, user, ws }) => {
   const pasted = String(req.body?.api_key ?? '').trim()
-  const allowed = (process.env.NOVA_WORKSPACES ?? '').split(',').map((x) => x.trim()).includes(ws.id)
-  const key = pasted || (allowed ? process.env.NOVA_API_KEY : '')
+  const key = pasted || (novaAllowed(ws.id) ? process.env.NOVA_API_KEY : '')
   if (!key) throw new HttpError(400, 'Paste your Aczen Nova API key (it starts with nova_sk_).')
   if (!/^nova_sk_[A-Za-z0-9_-]{10,}$/.test(key)) throw new HttpError(400, 'That does not look like a Nova key. It starts with nova_sk_.')
   const ok = allow(user.id, 'tidy')
