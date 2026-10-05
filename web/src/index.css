@@ -343,6 +343,19 @@
   background-size: 40px 40px;
 }
 
+/* ---------- landing ---------- */
+
+/* the hero's second line: ember fading into rose */
+.text-ember {
+  background: linear-gradient(100deg, rgb(var(--brand)) 10%, rgb(var(--sky)) 55%, rgb(var(--lavender)) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* room below the baseline, or descenders (the g in "change") fall outside the painted box */
+  padding-bottom: 0.14em;
+  margin-bottom: -0.14em;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
