@@ -3,7 +3,7 @@
 CRM revenue forecast as a range, with an exact explanation of every change between runs.
 
 ```
-web/      React + Vite + Tailwind + Recharts (the 4 screens; runs on mocks by default)
+web/      React + Vite + Tailwind + Recharts + GSAP (landing and app screens; runs on mocks by default)
 server/   Node + Express API over Supabase Postgres; POST /run starts the Python engine
 engine/   Python: generator, models, Monte Carlo, snapshots, attribution, backtest
 supabase/migrations/   schema (applied to project vwmftyrxospghiupzaxa)
@@ -14,6 +14,23 @@ supabase/migrations/   schema (applied to project vwmftyrxospghiupzaxa)
 Landing → sign up / sign in (Supabase email + password) → name your workspace → Data: upload a pipeline CSV
 (template on the page) or load the sample company → first forecast runs → Dashboard. Each week, re-upload the
 pipeline and **What changed** explains the difference, deal by deal.
+
+## Landing page
+
+`/` is one scroll-driven story with no static cards; every figure is drawn from the sample company's data in
+`web/src/mocks` and moves with the scroll (GSAP ScrollTrigger and ScrollSmoother).
+
+1. **Hero**: a fan of revenue paths that leans toward the pointer and collapses into one number as you scroll.
+2. **How it works** (pinned): twelve real deals pop out of the CRM formula, re-score, decay with silence, regroup
+   and calibrate by salesperson, run out to their payment dates, then feed 10,000 simulated futures that close
+   into a range with the chance of hitting target. Hover a deal for its numbers.
+3. **Try the range**: pick 30, 60 or 90 days and bookings or cash, then drag the target; the chance re-counts.
+4. **Why it moved** (pinned): a waterfall from last week to this week, step by step, naming the deals behind each step.
+5. **Proof** (pinned): twelve months of backtests drawn month by month, then the error against the stage formula.
+
+With reduced motion, each scene jumps to its finished state. Code: `web/src/pages/Landing.tsx` and one file per
+scene in `web/src/components/landing/` (`data.ts` holds the numbers, `scroll.ts` ties timelines to the scroll).
+The scene-by-scene story is in `docs/landing_scroll_story.md`.
 
 ## Run
 
