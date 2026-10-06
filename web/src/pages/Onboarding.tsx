@@ -1,14 +1,13 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Building2, Check, LogOut } from 'lucide-react'
 import { api, type Target } from '../api/client'
 import { useAuth } from '../auth'
 import { money } from '../lib'
 import { Logo, LogoMark } from '../components/Logo'
-import { RangeBand } from '../components/RangeBand'
+import { HORIZONS, TargetPreview, suggestedTarget, type Horizon } from '../components/TargetPreview'
 import { Button } from '../components/ui'
 
-const HORIZONS = [30, 60, 90] as const
 const STEPS = ['Account', 'Workspace', 'Data']
 
 /** Three-step progress with a filling rail; done steps tick, the current one pulses. */
@@ -38,6 +37,8 @@ export default function OnboardingPage() {
   const navigate = useNavigate()
   const [name, setName] = useState('')
   const [targets, setTargets] = useState<Record<number, string>>({})
+  const [active, setActive] = useState<Horizon>(30)
+  const fields = useRef<Record<number, HTMLInputElement | null>>({})
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string>()
   useEffect(() => void (document.title = 'Set up your workspace · Rangefinder'), [])
@@ -57,7 +58,9 @@ export default function OnboardingPage() {
     }
   }
 
-  const t30 = Number(targets[30]) || 2_100_000
+  // the preview follows the field being edited; picking a horizon there jumps to its field
+  const typed = Number(targets[active]) || 0
+  const pick = (h: Horizon) => (setActive(h), fields.current[h]?.focus())
 
   return (
     <main className="grid min-h-dvh lg:grid-cols-[1fr_minmax(420px,0.8fr)]">
@@ -84,15 +87,17 @@ export default function OnboardingPage() {
                 Bookings targets <span className="font-normal text-faint">(optional, in ₹)</span>
               </legend>
               <p className="mt-1 text-xs text-muted">Leave blank and we set them 10% above your first forecast. You can change them later.</p>
-              <div className="mt-3 grid grid-cols-3 gap-3">
+              <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-3">
                 {HORIZONS.map((h) => (
-                  <label key={h} className="text-xs text-muted">
+                  <label key={h} className="min-w-0 text-xs text-muted">
                     Next {h} days
                     <input
+                      ref={(el) => void (fields.current[h] = el)}
                       inputMode="numeric"
                       value={targets[h] ?? ''}
+                      onFocus={() => setActive(h)}
                       onChange={(e) => setTargets((t) => ({ ...t, [h]: e.target.value.replace(/[^0-9]/g, '') }))}
-                      placeholder="2500000"
+                      placeholder={String(suggestedTarget(h))}
                       className="field field-sm mt-1"
                     />
                     <span className="mt-1 block h-4 text-faint">{targets[h] ? money(Number(targets[h])) : ''}</span>
@@ -100,6 +105,10 @@ export default function OnboardingPage() {
                 ))}
               </div>
             </fieldset>
+            {/* phones and tablets have no side panel, so the preview sits under the targets */}
+            <div className="mt-5 rounded-lg border border-line p-4 lg:hidden">
+              <TargetPreview compact horizon={active} typed={typed} onHorizon={pick} />
+            </div>
             {error && <p role="alert" className="mt-4 text-sm text-loss">{error}</p>}
             <Button type="submit" busy={busy} size="lg" arrow className="mt-6 w-full">
               Create workspace
@@ -118,14 +127,14 @@ export default function OnboardingPage() {
               <LogoMark size={36} />
               <div className="min-w-0">
                 <p className="truncate text-lg font-semibold">{name || 'Your company'}</p>
-                <p className="text-xs text-faint">Next 30 days · bookings</p>
+                <p className="text-xs text-faint">Next {active} days · bookings</p>
               </div>
             </div>
-            <div className="mt-6 rounded-lg border border-line px-4 pb-2 pt-4">
-              <RangeBand low={1_520_000} mid={1_920_000} high={2_380_000} target={t30} />
+            <div className="mt-6">
+              <TargetPreview horizon={active} typed={typed} onHorizon={pick} />
             </div>
             <p className="mt-4 text-sm text-muted">
-              Once your pipeline lands, this band shows where next month really ends up, and the dashed line is your target.
+              Each bar is a slice of ten thousand simulated futures. Once your pipeline lands, they are your real deals, and the lit bars are the futures that reach your target.
             </p>
           </div>
         </div>
