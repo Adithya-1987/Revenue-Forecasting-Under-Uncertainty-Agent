@@ -10,22 +10,28 @@ import { countTo, drive, q } from './scroll'
  */
 
 const H12 = ACCURACY.history
-const W = 760
 const H = 400
 const V0 = 1_200_000
 const V1 = 2_900_000
-const x = (i: number) => 64 + (i * (W - 90)) / (H12.length - 1)
-const y = (v: number) => 360 - ((v - V0) / (V1 - V0)) * 320
 const inside = H12.map((m) => m.actual >= m.p10 && m.actual <= m.p90)
 const ours = ACCURACY.mape['30'] ?? 0
 const formula = ACCURACY.baseline_mape ?? 0
 const SCALE = Math.max(ours, formula) * 1.15
 const month = (s: string) => new Date(`${s}-01`).toLocaleDateString('en-GB', { month: 'short' })
+const y = (v: number) => 360 - ((v - V0) / (V1 - V0)) * 320
 
-const band = `M${H12.map((m, i) => `${x(i)},${y(m.p90)}`).join('L')}L${[...H12].reverse().map((m, i) => `${x(H12.length - 1 - i)},${y(m.p10)}`).join('L')}Z`
-const line = `M${H12.map((m, i) => `${x(i)},${y(m.predicted)}`).join('L')}`
+/** Phones get a narrower frame, so the month and money labels stay readable at phone scale. */
+function geometry(narrow: boolean) {
+  const W = narrow ? 420 : 760
+  const x0 = narrow ? 46 : 64
+  const x = (i: number) => x0 + (i * (W - x0 - 20)) / (H12.length - 1)
+  const band = `M${H12.map((m, i) => `${x(i)},${y(m.p90)}`).join('L')}L${[...H12].reverse().map((m, i) => `${x(H12.length - 1 - i)},${y(m.p10)}`).join('L')}Z`
+  const line = `M${H12.map((m, i) => `${x(i)},${y(m.predicted)}`).join('L')}`
+  return { W, x0, x, band, line }
+}
 
-export function buildProof(root: HTMLElement, motion: boolean) {
+export function buildProof(root: HTMLElement, narrow: boolean, motion: boolean) {
+  const { W, x } = geometry(narrow)
   const svg = root.querySelector('svg')!
   const dots = q(svg, '.p-dot')
   const seenEl = root.querySelector('.p-seen')!
@@ -57,7 +63,9 @@ export function buildProof(root: HTMLElement, motion: boolean) {
   drive(tl, { trigger: root, start: 'top top', end: () => `+=${innerHeight * 2.6}`, pin: true, anticipatePin: 1, invalidateOnRefresh: true }, { motion })
 }
 
-export function Proof() {
+export function Proof({ narrow }: { narrow: boolean }) {
+  const { W, x0, x, band, line } = geometry(narrow)
+  const t = narrow ? 'text-[13px]' : 'text-[11px]'
   const clip = `pc${useId().replace(/:/g, '')}`
   return (
     <section id="proof" className="relative h-[100svh] overflow-hidden" aria-label="Backtest results">
@@ -91,7 +99,7 @@ export function Proof() {
           </div>
         </div>
 
-        <svg data-rise viewBox={`0 0 ${W} ${H}`} className="min-h-0 w-full flex-1 overflow-visible lg:h-[min(540px,calc(100svh-140px))] lg:flex-none" role="img" aria-label="Twelve months of forecast ranges against actual results">
+        <svg data-rise viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMin meet" className="min-h-0 w-full flex-1 overflow-visible lg:h-[min(540px,calc(100svh-140px))] lg:flex-none" role="img" aria-label="Twelve months of forecast ranges against actual results">
           <defs>
             <clipPath id={clip}>
               <rect className="p-clip" x={0} y={0} width={W} height={H} />
@@ -99,8 +107,8 @@ export function Proof() {
           </defs>
           {[1.5e6, 2e6, 2.5e6].map((v) => (
             <g key={v}>
-              <line className="stroke-line" x1={56} x2={W} y1={y(v)} y2={y(v)} strokeDasharray="2 5" />
-              <text className="fill-faint text-[11px] max-sm:text-[18px]" x={48} y={y(v) + 4} textAnchor="end">{money(v)}</text>
+              <line className="stroke-line" x1={x0 - 8} x2={W} y1={y(v)} y2={y(v)} strokeDasharray="2 5" />
+              <text className={`fill-faint ${t}`} x={x0 - 14} y={y(v) + 4} textAnchor="end">{money(v)}</text>
             </g>
           ))}
           <g clipPath={`url(#${clip})`}>
@@ -111,13 +119,13 @@ export function Proof() {
             <g key={m.run_at} className="p-dot">
               <circle className={inside[i] ? 'fill-ink' : 'fill-canvas stroke-loss'} cx={x(i)} cy={y(m.actual)} r={6} strokeWidth={2.5} />
               {!inside[i] && (
-                <text className="fill-loss text-[11px] font-semibold max-sm:text-[18px]" x={x(i)} y={y(m.actual) + (m.actual > m.p90 ? -14 : 26)} textAnchor="middle">outside</text>
+                <text className={`fill-loss font-semibold ${t}`} x={x(i)} y={y(m.actual) + (m.actual > m.p90 ? -14 : 26)} textAnchor="middle">outside</text>
               )}
               <title>{`${month(m.run_at)}: predicted ${money(m.predicted)}, actual ${money(m.actual)}`}</title>
             </g>
           ))}
           {H12.map((m, i) => (
-            <text key={m.run_at} className="fill-faint text-[11px] max-sm:text-[16px]" x={x(i)} y={392} textAnchor="middle">{month(m.run_at)}</text>
+            <text key={m.run_at} className={`fill-faint ${t}`} x={x(i)} y={392} textAnchor="middle">{narrow && i % 2 ? '' : month(m.run_at)}</text>
           ))}
         </svg>
       </div>

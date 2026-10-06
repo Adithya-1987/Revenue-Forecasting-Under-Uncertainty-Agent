@@ -16,7 +16,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { Accuracy, Changes, CauseType, Forecast } from '../types'
-import { money, shortDate } from '../lib'
+import { money, shortDate, useMedia } from '../lib'
 import { prefersReducedMotion, useChartColors } from '../theme'
 import { CAUSE_LABEL, groupCauses } from './Ledger'
 
@@ -138,6 +138,8 @@ interface WaterfallProps {
 /** Previous total, one floating bar per cause, residual, current total. Cause bars are clickable. */
 export function Waterfall({ changes, selected, onSelect }: WaterfallProps) {
   const { tick, c } = useAxis()
+  // phones: eight labels do not fit side by side, so they lean
+  const narrow = useMedia('(max-width: 639px)')
   const steps = [
     ...groupCauses(changes).map((g) => ({ name: CAUSE_LABEL[g.type][1], type: g.type as CauseType | null, amount: g.amount })),
     { name: 'Residual', type: null, amount: changes.residual },
@@ -161,8 +163,8 @@ export function Waterfall({ changes, selected, onSelect }: WaterfallProps) {
       <ResponsiveContainer>
         <BarChart data={data} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} barCategoryGap="22%">
           <CartesianGrid stroke={c.line} strokeDasharray="3 4" vertical={false} />
-          <XAxis dataKey="name" tick={tick} tickLine={false} axisLine={{ stroke: c.line }} interval={0} />
-          <YAxis domain={[floor, 'auto']} tickFormatter={moneyTick} tick={tick} tickLine={false} axisLine={false} width={56} />
+          <XAxis dataKey="name" tick={tick} tickLine={false} axisLine={{ stroke: c.line }} interval={0} angle={narrow ? -40 : 0} textAnchor={narrow ? 'end' : 'middle'} height={narrow ? 56 : 30} />
+          <YAxis domain={[floor, 'auto']} tickFormatter={moneyTick} tick={tick} tickLine={false} axisLine={false} width={narrow ? 46 : 56} />
           <Tooltip
             cursor={{ fill: c.ink, fillOpacity: 0.04 }}
             content={(p) => (

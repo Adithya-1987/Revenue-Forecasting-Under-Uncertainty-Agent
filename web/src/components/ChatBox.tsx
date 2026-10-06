@@ -283,7 +283,7 @@ export function ChatBox({ mode = 'forecast' }: { mode?: Mode }) {
       </p>
       <form onSubmit={submit} className="mt-1 flex flex-col gap-2 sm:flex-row">
         <label htmlFor={`q-${mode}`} className="sr-only">Question</label>
-        <input id={`q-${mode}`} value={question} maxLength={500} onChange={(e) => setQuestion(e.target.value)} placeholder={cfg.placeholder} className="field !h-14 flex-1 !text-base" />
+        <input id={`q-${mode}`} value={question} maxLength={500} onChange={(e) => setQuestion(e.target.value)} placeholder={cfg.placeholder} className="field !h-14 !text-md sm:flex-1 sm:!text-base" />
         {canListen && (
           <button
             type="button"

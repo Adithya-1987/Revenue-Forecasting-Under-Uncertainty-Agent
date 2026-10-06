@@ -163,13 +163,13 @@ function Account() {
     <details ref={ref} className="group relative">
       <summary
         aria-label={`Account: ${me.user.email}`}
-        className="btn btn-secondary !h-12 cursor-pointer list-none gap-2.5 !pl-1.5 !pr-3.5 [&::-webkit-details-marker]:hidden"
+        className="btn btn-secondary !h-10 !w-10 cursor-pointer list-none gap-2.5 !p-0 sm:!h-12 sm:!w-auto sm:!pl-1.5 sm:!pr-3.5 [&::-webkit-details-marker]:hidden"
       >
         <span className="grid size-9 place-items-center rounded-full bg-gradient-to-br from-[#f6c39b] via-[#ec9256] to-[#c98a9b] text-sm font-semibold text-white">
           {name[0]?.toUpperCase()}
         </span>
         <span className="hidden max-w-[10rem] truncate text-sm font-semibold sm:block">{name}</span>
-        <ChevronDown size={16} aria-hidden className="text-faint transition-transform duration-200 group-open:rotate-180" />
+        <ChevronDown size={16} aria-hidden className="hidden text-faint transition-transform sm:block duration-200 group-open:rotate-180" />
       </summary>
       <div className="write-in absolute right-0 top-[calc(100%+8px)] z-40 w-64 rounded-2xl border border-line bg-surface p-1.5 text-sm shadow-pop">
         <p className="px-3 pt-2 text-xs text-faint">Signed in as</p>
@@ -192,13 +192,13 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
   const page = ALL.find((n) => n.to === pathname)
 
   return (
-    <header className="flex flex-wrap items-center gap-3 px-5 pb-2 pt-5 sm:px-8 sm:pt-8">
+    <header className="flex items-center gap-2.5 px-4 pb-2 pt-4 sm:gap-3 sm:px-8 sm:pt-8">
       <button type="button" onClick={onMenu} aria-label="Open navigation" className="btn btn-secondary !h-10 !w-10 !px-0 lg:hidden">
         <Menu size={19} aria-hidden />
       </button>
-      <h1 className="min-w-0 truncate text-[28px] font-semibold leading-none tracking-tight sm:text-[38px]">{page?.title ?? 'Rangefinder'}</h1>
+      <h1 className="min-w-0 flex-1 truncate text-[21px] font-semibold leading-tight tracking-tight sm:flex-none sm:text-[38px] sm:leading-none">{page?.title ?? 'Rangefinder'}</h1>
 
-      <div className="ml-auto flex items-center gap-2 sm:gap-2.5">
+      <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2.5">
         {f && (
           <span className="glass hidden h-10 items-center gap-2.5 rounded-full px-3.5 text-xs 2xl:flex" title="30-day bookings, worst to best case">
             <span className="font-medium text-faint">30-day range</span>
@@ -213,9 +213,12 @@ function TopBar({ onMenu }: { onMenu: () => void }) {
         </span>
         <ThemeToggle />
         {hasRuns && (
-          <Button onClick={run} busy={running} icon={Play} className="hidden !h-10 !px-4 sm:inline-flex">
-            {running ? 'Running' : 'Run forecast'}
-          </Button>
+          <>
+            <Button onClick={run} busy={running} icon={Play} className="hidden !h-10 !px-4 sm:inline-flex">
+              {running ? 'Running' : 'Run forecast'}
+            </Button>
+            <Button onClick={run} busy={running} icon={running ? undefined : Play} aria-label={running ? 'Running forecast' : 'Run forecast'} className="!h-10 !w-10 !px-0 sm:hidden" />
+          </>
         )}
         <Account />
       </div>
@@ -312,7 +315,7 @@ function AgentButton() {
       onClick={go}
       aria-label="Ask the agent"
       title="Ask the agent"
-      className="group fixed bottom-6 right-6 z-40 grid size-16 place-items-center rounded-full border border-white/50 bg-white/20 p-1.5 shadow-[0_10px_30px_-8px_rgb(var(--brand)/0.6),inset_0_1px_0_rgb(255_255_255/0.5)] backdrop-blur-xl transition-transform duration-200 ease-out hover:scale-105 active:scale-95 dark:border-white/20 dark:bg-white/10"
+      className="group fixed bottom-4 right-4 z-40 grid size-14 place-items-center sm:bottom-6 sm:right-6 sm:size-16 rounded-full border border-white/50 bg-white/20 p-1.5 shadow-[0_10px_30px_-8px_rgb(var(--brand)/0.6),inset_0_1px_0_rgb(255_255_255/0.5)] backdrop-blur-xl transition-transform duration-200 ease-out hover:scale-105 active:scale-95 dark:border-white/20 dark:bg-white/10"
     >
       <span className="grid size-full place-items-center rounded-full bg-gradient-to-br from-[#F6B07E] via-[#E8783A] to-[#B54E16] text-white shadow-inner">
         <Bot size={26} aria-hidden className="drop-shadow-sm transition-transform duration-200 group-hover:-rotate-6" />
@@ -363,7 +366,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <div ref={scroller} className="flex min-w-0 flex-1 flex-col lg:overflow-y-auto">
           <TopBar onMenu={() => setOpen(true)} />
-          <main id="main" tabIndex={-1} className="w-full max-w-[1280px] px-5 pb-12 pt-5 outline-none sm:px-8">
+          <main id="main" tabIndex={-1} className="w-full max-w-[1280px] px-4 pb-28 pt-5 outline-none sm:px-8 lg:pb-12">
             <div key={pathname} className="page-enter">
               {children}
             </div>

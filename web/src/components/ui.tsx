@@ -242,7 +242,7 @@ export function Segmented<T extends string | number>({ options, value, onChange,
               if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') (e.preventDefault(), move(-1))
             }}
             className={`relative z-10 inline-flex items-center gap-1.5 rounded-full font-medium transition-colors duration-200 ${
-              size === 'sm' ? 'h-7 px-2.5 text-xs' : 'h-8 px-3 text-sm'
+              size === 'sm' ? 'h-9 px-3 text-xs sm:h-7 sm:px-2.5' : 'h-10 px-3.5 text-sm sm:h-8 sm:px-3'
             } ${on ? 'text-ink' : 'text-muted hover:text-ink'}`}
           >
             {Icon && <Icon size={14} aria-hidden />}

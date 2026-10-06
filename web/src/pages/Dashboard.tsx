@@ -159,32 +159,33 @@ export default function DashboardPage() {
               action={<MoreLink to="/app/risk">All deals at risk</MoreLink>}
             >
               <div className="overflow-x-auto px-2 pb-3 sm:px-3">
-                <table className="w-full min-w-[640px] text-sm">
+                <table className="w-full text-sm sm:min-w-[640px]">
                   <thead>
                     <tr className="text-left text-xs text-faint">
                       {['ID', 'Deal', 'Owner', 'Chance to win', 'At risk'].map((h, i) => (
-                        <th key={h} scope="col" className={`px-3 py-3 font-medium ${i === 4 ? 'text-right' : ''}`}>{h}</th>
+                        <th key={h} scope="col" className={`px-2 py-3 font-medium sm:px-3 ${i === 4 ? 'text-right' : ''} ${i === 0 || i === 2 ? 'hidden sm:table-cell' : ''}`}>{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {(risk ?? []).slice(0, 6).map((d, i) => (
                       <tr key={d.deal_id} className="write-in transition-colors hover:bg-white/50 dark:hover:bg-white/5" style={{ animationDelay: `${i * 50}ms` }}>
-                        <td className="whitespace-nowrap px-3 py-3 font-medium text-faint">{d.deal_id}</td>
-                        <td className="px-3 py-3">
+                        <td className="hidden whitespace-nowrap px-3 py-3 font-medium text-faint sm:table-cell">{d.deal_id}</td>
+                        <td className="px-2 py-3 sm:px-3">
                           <span className="block font-semibold">{d.name}</span>
-                          <span className="block truncate text-xs text-faint">{d.reasons.slice(0, 2).join(' · ') || d.segment}</span>
+                          <span className="block max-w-[8.5rem] truncate text-xs text-faint sm:max-w-none">{d.reasons.slice(0, 2).join(' · ') || d.segment}</span>
+                          <span className="block text-xs text-muted sm:hidden">{d.rep}</span>
                         </td>
-                        <td className="whitespace-nowrap px-3 py-3 text-muted">{d.rep}</td>
-                        <td className="px-3 py-3">
-                          <span className="flex items-center gap-3">
-                            <span className="relative h-2 w-28 overflow-hidden rounded-full bg-ink/[0.08] dark:bg-white/10" aria-hidden>
+                        <td className="hidden whitespace-nowrap px-3 py-3 text-muted sm:table-cell">{d.rep}</td>
+                        <td className="px-2 py-3 sm:px-3">
+                          <span className="flex items-center gap-2 sm:gap-3">
+                            <span className="relative h-2 w-14 overflow-hidden rounded-full sm:w-28 bg-ink/[0.08] dark:bg-white/10" aria-hidden>
                               <span className="ember-fill-x absolute inset-y-0 left-0 rounded-full" style={{ width: pct(d.p_win) }} />
                             </span>
                             <span className="w-9 text-xs font-medium">{pct(d.p_win)}</span>
                           </span>
                         </td>
-                        <td className="whitespace-nowrap px-3 py-3 text-right font-semibold text-loss">{money(d.expected_damage)}</td>
+                        <td className="whitespace-nowrap px-2 py-3 text-right font-semibold text-loss sm:px-3">{money(d.expected_damage)}</td>
                       </tr>
                     ))}
                   </tbody>

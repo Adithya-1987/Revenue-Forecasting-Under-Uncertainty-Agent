@@ -46,21 +46,80 @@ const STEPS: Step[] = (() => {
   return out
 })()
 
-const W = 760
-const H = 440
 const Y0 = 1_500_000
 const Y1 = 2_500_000
-const TOP = 36
-const BASE = H - 52
-const y = (v: number) => BASE - ((Math.max(Y0, v) - Y0) / (Y1 - Y0)) * (BASE - TOP)
-const SLOT = (W - 70) / STEPS.length
-const bw = SLOT * 0.62
-const x = (i: number) => 60 + i * SLOT + (SLOT - bw) / 2
+const GRID = [1.5e6, 1.75e6, 2e6, 2.25e6, 2.5e6]
 const tone = { total: 'fill-ink', gain: 'fill-gain', loss: 'fill-loss' } as const
 const moved = CHANGES.curr_total - CHANGES.prev_total
 const fmt = (s: Step) => (s.kind === 'total' ? money(s.amount) : signedMoney(s.amount))
+const span = (v: number) => (Math.max(Y0, v) - Y0) / (Y1 - Y0)
 
-export function buildMoved(root: HTMLElement, motion: boolean) {
+/*
+ * Two layouts of the same waterfall. Wide screens stand the steps side by side; phones lay them as rows, so each
+ * step keeps a readable label and the amounts never collide.
+ */
+function geometry(narrow: boolean) {
+  if (narrow) {
+    const W = 400
+    const H = 430
+    const X0 = 92
+    const X1 = W - 66
+    const TOP = 8
+    const rowH = (H - 34 - TOP) / STEPS.length
+    const bh = rowH * 0.56
+    const xv = (v: number) => X0 + span(v) * (X1 - X0)
+    const cy = (i: number) => TOP + i * rowH + rowH / 2
+    return {
+      W, H,
+      bar: (s: Step, i: number) => {
+        const a = s.kind === 'total' ? xv(Y0) : xv(Math.min(s.from, s.to))
+        const b = xv(s.kind === 'total' ? s.to : Math.max(s.from, s.to))
+        return { x: a, y: cy(i) - bh / 2, width: Math.max(2, b - a), height: bh }
+      },
+      origin: (s: Step, i: number) => `${s.kind === 'total' ? xv(Y0) : xv(s.from)} ${cy(i)}`,
+      grow: 'scaleX' as const,
+      amt: (s: Step, i: number) => ({ x: xv(s.kind === 'total' ? s.to : Math.max(s.from, s.to)) + 6, y: cy(i) + 4, anchor: 'start' as const }),
+      label: (i: number) => ({ x: 0, y: cy(i) + 4, anchor: 'start' as const }),
+      link: (s: Step, i: number) => ({ x1: xv(s.to), x2: xv(s.to), y1: cy(i) + bh / 2, y2: cy(i + 1) - bh / 2 }),
+      linkGrow: 'scaleY' as const,
+      linkOrigin: (s: Step, i: number) => `${xv(s.to)} ${cy(i) + bh / 2}`,
+      grid: (v: number) => ({ x1: xv(v), x2: xv(v), y1: TOP - 4, y2: H - 30 }),
+      gridLabel: (v: number) => ({ x: xv(v), y: H - 12, anchor: 'middle' as const }),
+    }
+  }
+  const W = 760
+  const H = 440
+  const TOP = 36
+  const BASE = H - 52
+  const y = (v: number) => BASE - span(v) * (BASE - TOP)
+  const SLOT = (W - 70) / STEPS.length
+  const bw = SLOT * 0.62
+  const x = (i: number) => 60 + i * SLOT + (SLOT - bw) / 2
+  return {
+    W, H,
+    bar: (s: Step, i: number) => {
+      const top = s.kind === 'total' ? y(s.to) : y(Math.max(s.from, s.to))
+      const h = s.kind === 'total' ? BASE - y(s.to) : Math.max(2, Math.abs(y(s.from) - y(s.to)))
+      return { x: x(i), y: top, width: bw, height: h }
+    },
+    origin: (s: Step, i: number) => `${x(i)} ${s.kind === 'total' ? BASE : y(s.from)}`,
+    grow: 'scaleY' as const,
+    amt: (s: Step, i: number) => {
+      const top = s.kind === 'total' ? y(s.to) : y(Math.max(s.from, s.to))
+      const bottom = s.kind === 'total' ? BASE : y(Math.min(s.from, s.to))
+      return { x: x(i) + bw / 2, y: s.kind === 'loss' ? bottom + 16 : top - 8, anchor: 'middle' as const }
+    },
+    label: (i: number) => ({ x: x(i) + bw / 2, y: BASE + 22, anchor: 'middle' as const }),
+    link: (s: Step, i: number) => ({ x1: x(i) + bw, x2: x(i + 1), y1: y(s.to), y2: y(s.to) }),
+    linkGrow: 'scaleX' as const,
+    linkOrigin: (_: Step, i: number) => `${x(i) + bw} 0`,
+    grid: (v: number) => ({ x1: 52, x2: W, y1: y(v), y2: y(v) }),
+    gridLabel: (v: number) => ({ x: 46, y: y(v) + 4, anchor: 'end' as const }),
+  }
+}
+
+export function buildMoved(root: HTMLElement, narrow: boolean, motion: boolean) {
+  const G = geometry(narrow)
   const svg = root.querySelector('svg')!
   const bars = q<SVGRectElement>(svg, '.m-bar')
   const amts = q(svg, '.m-amt')
@@ -71,10 +130,13 @@ export function buildMoved(root: HTMLElement, motion: boolean) {
   const tl = gsap.timeline({ defaults: { ease: 'power2.out', duration: 0.6 } })
   STEPS.forEach((s, i) => {
     tl.addLabel(`s${i}`, i)
-    const origin = s.kind === 'total' ? BASE : y(s.from)
-    tl.fromTo(bars[i], { scaleY: 0, svgOrigin: `${x(i)} ${origin}` }, { scaleY: 1, svgOrigin: `${x(i)} ${origin}` }, i + 0.05)
-      .fromTo(amts[i], { autoAlpha: 0, y: s.kind === 'loss' ? -8 : 8 }, { autoAlpha: 1, y: 0, duration: 0.3 }, i + 0.4)
-    if (i > 0) tl.fromTo(links[i - 1], { scaleX: 0, svgOrigin: `${x(i - 1) + bw} 0` }, { scaleX: 1, svgOrigin: `${x(i - 1) + bw} 0`, duration: 0.3 }, i)
+    const o = G.origin(s, i)
+    tl.fromTo(bars[i], { [G.grow]: 0, svgOrigin: o }, { [G.grow]: 1, svgOrigin: o }, i + 0.05)
+      .fromTo(amts[i], { autoAlpha: 0, x: narrow ? -8 : 0, y: narrow ? 0 : s.kind === 'loss' ? -8 : 8 }, { autoAlpha: 1, x: 0, y: 0, duration: 0.3 }, i + 0.4)
+    if (i > 0) {
+      const lo = G.linkOrigin(STEPS[i - 1], i - 1)
+      tl.fromTo(links[i - 1], { [G.linkGrow]: 0, svgOrigin: lo }, { [G.linkGrow]: 1, svgOrigin: lo, duration: 0.3 }, i)
+    }
     countTo(tl, totalEl, total, s.to, money, i + 0.05, 0.6)
   })
   tl.fromTo(root.querySelector('.m-delta'), { autoAlpha: 0, scale: 0.6 }, { autoAlpha: 1, scale: 1, duration: 0.35, ease: 'back.out(2)' }, STEPS.length - 0.5).to({}, { duration: 0.5 })
@@ -94,18 +156,19 @@ export function buildMoved(root: HTMLElement, motion: boolean) {
   drive(tl, { trigger: root, start: 'top top', end: () => `+=${innerHeight * 4}`, pin: true, anticipatePin: 1, invalidateOnRefresh: true }, { motion, onChapter: show })
 }
 
-export function Moved() {
+export function Moved({ narrow }: { narrow: boolean }) {
+  const G = geometry(narrow)
   return (
     <section id="moved" className="relative h-[100svh] overflow-hidden" aria-label="Why the forecast moved">
       <div className="mx-auto flex h-full max-w-[1240px] flex-col gap-4 px-4 pb-4 pt-[76px] lg:grid lg:grid-cols-[minmax(300px,0.7fr)_1.4fr] lg:items-center lg:gap-14 lg:px-8 lg:pt-20">
         <div data-rise>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-brand">Forecast change explanation</p>
           <h2 className="mt-2 text-[clamp(1.75rem,3.6vw,3rem)] font-bold leading-[1.04] tracking-[-0.04em] lg:mt-4">Every move, explained to the rupee.</h2>
-          <div className="mt-4 flex items-baseline gap-3 lg:mt-8">
-            <span className="m-total font-head text-[clamp(2.5rem,5vw,4rem)] font-bold leading-none tracking-[-0.045em]">{money(CHANGES.curr_total)}</span>
+          <div className="mt-3 flex items-baseline gap-3 lg:mt-8">
+            <span className="m-total font-head text-[clamp(2.25rem,5vw,4rem)] font-bold leading-none tracking-[-0.045em]">{money(CHANGES.curr_total)}</span>
             <span className="m-delta rounded-full bg-loss/10 px-2.5 py-1 font-mono text-sm font-semibold text-loss">{signedMoney(moved)}</span>
           </div>
-          <div className="mt-4 grid lg:mt-8">
+          <div className="mt-3 grid lg:mt-8">
             {STEPS.map((s, i) => (
               <div key={s.key} className="m-note [grid-area:1/1]" style={i ? { visibility: 'hidden' } : undefined}>
                 <p className="flex items-baseline justify-between gap-4 border-b border-line pb-2 text-sm font-semibold">
@@ -114,7 +177,7 @@ export function Moved() {
                 </p>
                 {s.lines.length > 0 ? (
                   <ul className="mt-2 space-y-1.5 text-sm">
-                    {s.lines.slice(0, 4).map((l) => (
+                    {s.lines.slice(0, narrow ? 2 : 4).map((l) => (
                       <li key={l.name + l.text} className="grid grid-cols-[1fr_auto] gap-x-4">
                         <span className="truncate">
                           <span className="font-medium text-ink">{l.name}</span> <span className="text-muted">{l.text}</span>
@@ -122,6 +185,7 @@ export function Moved() {
                         <span className={`font-mono ${l.amount < 0 ? 'text-loss' : 'text-gain'}`}>{signedMoney(l.amount)}</span>
                       </li>
                     ))}
+                    {narrow && s.lines.length > 2 && <li className="text-xs text-faint">and {s.lines.length - 2} more</li>}
                   </ul>
                 ) : (
                   <p className="mt-2 text-sm text-muted">
@@ -137,31 +201,38 @@ export function Moved() {
           </div>
         </div>
 
-        <svg data-rise viewBox={`0 0 ${W} ${H}`} className="min-h-0 w-full flex-1 overflow-visible lg:h-[min(560px,calc(100svh-140px))] lg:flex-none" role="img" aria-label={`Waterfall from ${money(CHANGES.prev_total)} to ${money(CHANGES.curr_total)}`}>
-          {[1.5e6, 1.75e6, 2e6, 2.25e6, 2.5e6].map((v) => (
-            <g key={v}>
-              <line className="stroke-line" x1={52} x2={W} y1={y(v)} y2={y(v)} strokeDasharray={v === Y0 ? undefined : '2 5'} />
-              <text className="fill-faint text-[11px] max-sm:text-[17px]" x={46} y={y(v) + 4} textAnchor="end">{money(v)}</text>
-            </g>
-          ))}
+        <svg
+          data-rise
+          viewBox={`0 0 ${G.W} ${G.H}`}
+          preserveAspectRatio="xMidYMin meet"
+          className="min-h-0 w-full flex-1 overflow-visible lg:h-[min(560px,calc(100svh-140px))] lg:flex-none"
+          role="img"
+          aria-label={`Waterfall from ${money(CHANGES.prev_total)} to ${money(CHANGES.curr_total)}`}
+        >
+          {GRID.map((v) => {
+            const t = G.gridLabel(v)
+            return (
+              <g key={v}>
+                <line className="stroke-line" {...G.grid(v)} strokeDasharray={v === Y0 ? undefined : '2 5'} />
+                {(!narrow || v % 5e5 === 0) && (
+                  <text className="fill-faint text-[11px]" x={t.x} y={t.y} textAnchor={t.anchor}>{money(v)}</text>
+                )}
+              </g>
+            )
+          })}
           {STEPS.map((s, i) => {
-            const top = s.kind === 'total' ? y(s.to) : y(Math.max(s.from, s.to))
-            const h = s.kind === 'total' ? BASE - y(s.to) : Math.max(2, Math.abs(y(s.from) - y(s.to)))
+            const a = G.amt(s, i)
+            const l = G.label(i)
             return (
               <g key={s.key}>
-                {i < STEPS.length - 1 && <line className="m-link stroke-faint" x1={x(i) + bw} x2={x(i + 1)} y1={y(s.to)} y2={y(s.to)} strokeDasharray="3 3" />}
-                <rect className={`m-bar ${tone[s.kind]} transition-opacity duration-300 [&.m-dim]:opacity-30`} x={x(i)} y={top} width={bw} height={h} rx={5}>
+                {i < STEPS.length - 1 && <line className="m-link stroke-faint" {...G.link(s, i)} strokeDasharray="3 3" />}
+                <rect className={`m-bar ${tone[s.kind]} transition-opacity duration-300 [&.m-dim]:opacity-30`} {...G.bar(s, i)} rx={narrow ? 4 : 5}>
                   <title>{`${s.long}: ${fmt(s)}`}</title>
                 </rect>
-                <text
-                  className={`m-amt text-[12px] font-semibold max-sm:text-[17px] ${s.kind === 'total' ? 'fill-ink' : s.kind === 'gain' ? 'fill-gain' : 'fill-loss'}`}
-                  x={x(i) + bw / 2}
-                  y={s.kind === 'loss' ? top + h + 16 : top - 8}
-                  textAnchor="middle"
-                >
+                <text className={`m-amt text-[12px] font-semibold ${s.kind === 'total' ? 'fill-ink' : s.kind === 'gain' ? 'fill-gain' : 'fill-loss'}`} x={a.x} y={a.y} textAnchor={a.anchor}>
                   {fmt(s)}
                 </text>
-                <text className="fill-muted text-[11px] max-sm:text-[16px]" x={x(i) + bw / 2} y={BASE + 22} textAnchor="middle">{s.short}</text>
+                <text className={`fill-muted ${narrow ? 'text-[12px] font-medium' : 'text-[11px]'}`} x={l.x} y={l.y} textAnchor={l.anchor}>{s.short}</text>
               </g>
             )
           })}

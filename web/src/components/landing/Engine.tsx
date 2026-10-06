@@ -313,7 +313,7 @@ export function Engine({ narrow }: { narrow: boolean }) {
         </div>
 
         <div data-rise className="relative min-h-0 flex-1 lg:h-[min(620px,calc(100svh-130px))] lg:flex-none" onPointerMove={onMove} onPointerLeave={() => setTip(null)}>
-          <svg viewBox={`0 0 ${G.W} ${G.H}`} className="h-full w-full overflow-visible" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Twelve deals turning into a forecast range">
+          <svg viewBox={`0 0 ${G.W} ${G.H}`} className="h-full w-full overflow-visible" preserveAspectRatio={narrow ? 'xMidYMin meet' : 'xMidYMid meet'} role="img" aria-label="Twelve deals turning into a forecast range">
             {/* header */}
             <text className="e-label fill-faint text-[11px] font-semibold uppercase tracking-[0.14em]" x={0} y={18}>{CHAPTERS[0].label}</text>
             <text className="e-sub fill-muted text-[12px]" x={G.W} y={18} textAnchor="end">{CHAPTERS[0].sub}</text>

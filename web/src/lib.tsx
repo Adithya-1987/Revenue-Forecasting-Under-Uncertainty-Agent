@@ -23,6 +23,19 @@ export const figure = (n: number) =>
 
 export const pct = (x: number, digits = 0) => `${(x * 100).toFixed(digits)}%`
 
+/** Live match of a media query, e.g. useMedia('(max-width: 639px)') for phone layouts. */
+export function useMedia(query: string) {
+  const [match, setMatch] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches)
+  useEffect(() => {
+    const mq = window.matchMedia(query)
+    const on = () => setMatch(mq.matches)
+    on()
+    mq.addEventListener('change', on)
+    return () => mq.removeEventListener('change', on)
+  }, [query])
+  return match
+}
+
 export const shortDate = (iso: string) =>
   new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 

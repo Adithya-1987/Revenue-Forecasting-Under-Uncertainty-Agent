@@ -10,13 +10,15 @@ import { PageSkeleton } from '../components/Loaders'
 import { Button, Card, EmptyState, ErrorNote, StatCard } from '../components/ui'
 
 type SortKey = 'expected_damage' | 'value' | 'p_win' | 'slip_prob' | 'slip_period_prob'
+// On phones only Deal, Chance to win and Expected damage are columns; the rest folds into the deal cell.
+const WIDE = 'hidden md:table-cell'
 const COLS: [SortKey | null, string, string][] = [
   [null, 'Deal', 'text-left'],
-  ['value', 'Value', 'text-right'],
+  ['value', 'Value', `text-right ${WIDE}`],
   ['p_win', 'Chance to win', 'text-left'],
-  ['slip_prob', 'Misses its date', 'text-right'],
-  ['slip_period_prob', 'Slips a month', 'text-right'],
-  [null, 'Stage · why', 'text-left'],
+  ['slip_prob', 'Misses its date', `text-right ${WIDE}`],
+  ['slip_period_prob', 'Slips a month', `text-right ${WIDE}`],
+  [null, 'Stage · why', `text-left ${WIDE}`],
   ['expected_damage', 'Expected damage', 'text-right'],
 ]
 
@@ -73,7 +75,7 @@ export default function RiskPage() {
 
           <Card pad={false} className="write-in overflow-hidden">
             <div className="flex flex-col gap-3 border-b border-line p-4 sm:flex-row sm:flex-wrap sm:items-center sm:px-6">
-              <label className="relative min-w-[220px] flex-1">
+              <label className="relative flex-1 sm:min-w-[220px]">
                 <span className="sr-only">Search deals</span>
                 <Search size={16} aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
                 <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search deal, rep or reason" className="field field-sm !pl-9" />
@@ -88,13 +90,13 @@ export default function RiskPage() {
               </EmptyState>
             ) : (
               <div className="overflow-x-auto px-4 sm:px-6">
-                <table className="w-full min-w-[960px] text-sm">
+                <table className="w-full text-sm md:min-w-[960px]">
                   <thead>
                     <tr className="border-b border-line text-xs text-faint">
                       {COLS.map(([key, name, align]) => (
                         <th key={name} scope="col" aria-sort={key === sort ? (key === 'p_win' ? 'ascending' : 'descending') : undefined} className={`py-3 pr-4 font-medium last:pr-0 ${align}`}>
                           {key ? (
-                            <button type="button" onClick={() => setSort(key)} className={`inline-flex items-center gap-1 rounded transition-colors ${key === sort ? 'text-brand' : 'hover:text-ink'}`}>
+                            <button type="button" onClick={() => setSort(key)} className={`-my-2 inline-flex min-h-10 items-center gap-1 rounded transition-colors ${key === sort ? 'text-brand' : 'hover:text-ink'}`}>
                               {name}
                               <ArrowDown size={12} aria-hidden className={`transition-all duration-300 ${key === sort ? 'opacity-100' : 'opacity-0'} ${key === 'p_win' ? 'rotate-180' : ''}`} />
                             </button>

@@ -273,9 +273,44 @@ function Targets() {
     }
   }
 
+  const cell = (b: 'bookings' | 'cash', h: number) => {
+    const k = `${b}-${h}`
+    return (
+      <>
+        <div className="relative mt-1 sm:mt-0">
+          <span aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-faint">₹</span>
+          <input
+            aria-label={`${b} target, next ${h} days, in rupees`}
+            inputMode="numeric"
+            value={draft[k] ?? ''}
+            onChange={(e) => (setDraft((d) => ({ ...d, [k]: e.target.value.replace(/[^0-9]/g, '') })), setState('idle'))}
+            className="field field-sm !pl-7"
+          />
+        </div>
+        {draft[k] && <span className="mt-1 block text-xs normal-case text-faint">{money(Number(draft[k]))}</span>}
+      </>
+    )
+  }
+
   return (
     <Card title="Revenue targets" sub="Targets set the dashed line and the chance of hitting it. New targets apply from the next forecast run." className="max-w-3xl">
-      <div className="overflow-x-auto">
+      {/* phones: one row per horizon, bookings and cash side by side */}
+      <div className="space-y-4 sm:hidden">
+        {[30, 60, 90].map((h) => (
+          <fieldset key={h}>
+            <legend className="mb-1.5 text-sm font-semibold">Next {h} days</legend>
+            <div className="grid grid-cols-2 gap-3">
+              {(['bookings', 'cash'] as const).map((b) => (
+                <label key={b} className="min-w-0 text-xs capitalize text-muted">
+                  {b}
+                  {cell(b, h)}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        ))}
+      </div>
+      <div className="hidden overflow-x-auto sm:block">
         <table className="w-full min-w-[520px] text-sm">
           <thead>
             <tr className="text-left text-xs text-faint">
@@ -289,17 +324,7 @@ function Targets() {
                 <th scope="row" className="py-2 pr-2 text-left font-semibold capitalize">{b}</th>
                 {[30, 60, 90].map((h) => (
                   <td key={h} className="py-2 pl-2 align-top">
-                    <div className="relative">
-                      <span aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-faint">₹</span>
-                      <input
-                        aria-label={`${b} target, next ${h} days, in rupees`}
-                        inputMode="numeric"
-                        value={draft[`${b}-${h}`] ?? ''}
-                        onChange={(e) => (setDraft((d) => ({ ...d, [`${b}-${h}`]: e.target.value.replace(/[^0-9]/g, '') })), setState('idle'))}
-                        className="field field-sm !pl-7"
-                      />
-                    </div>
-                    {draft[`${b}-${h}`] && <span className="mt-1 block text-xs text-faint">{money(Number(draft[`${b}-${h}`]))}</span>}
+                    {cell(b, h)}
                   </td>
                 ))}
               </tr>

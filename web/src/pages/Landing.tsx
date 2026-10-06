@@ -5,6 +5,7 @@ import { ScrollSmoother } from 'gsap/ScrollSmoother'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import { ArrowDown, ArrowRight } from 'lucide-react'
 import { useAuth } from '../auth'
+import { useMedia } from '../lib'
 import { ThemeToggle } from '../components/AppShell'
 import { Logo } from '../components/Logo'
 import { Button } from '../components/ui'
@@ -34,18 +35,6 @@ const ROWS = [
   ['30, 60 and 90-day horizons', 'Bookings and collected cash', '10,000 simulated futures', 'Salesperson calibration', 'Seasonality learned from your closes'],
   ['Every change attributed to a deal', 'Backtested against actuals', 'Concentration risk', 'Inactivity decay', 'CSV in, range out'],
 ]
-
-function useMedia(query: string) {
-  const [match, setMatch] = useState(() => typeof window !== 'undefined' && window.matchMedia(query).matches)
-  useEffect(() => {
-    const mq = window.matchMedia(query)
-    const on = () => setMatch(mq.matches)
-    on()
-    mq.addEventListener('change', on)
-    return () => mq.removeEventListener('change', on)
-  }, [query])
-  return match
-}
 
 /* ------------------------------------------------------------------ the fan */
 
@@ -206,8 +195,8 @@ export default function LandingPage() {
       buildEngine(scene('engine'), narrow, motion)
       cleanups.push(buildMarquee(el.querySelector('.mq')!, motion))
       buildLab(scene('lab'), motion)
-      buildMoved(scene('moved'), motion)
-      buildProof(scene('proof'), motion)
+      buildMoved(scene('moved'), narrow, motion)
+      buildProof(scene('proof'), narrow, motion)
 
       if (motion) {
         ;['engine', 'moved', 'proof'].forEach((id) => rise(scene(id)))
@@ -366,8 +355,8 @@ export default function LandingPage() {
             </section>
 
             {/* ---------------------------------------------------------------- why it moved, proof */}
-            <Moved />
-            <Proof />
+            <Moved narrow={narrow} />
+            <Proof narrow={narrow} />
 
             {/* ---------------------------------------------------------------- close */}
             <section id="cta" className="relative isolate overflow-hidden px-4 py-36 text-center sm:py-52">
